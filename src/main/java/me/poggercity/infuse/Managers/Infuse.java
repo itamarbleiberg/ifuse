@@ -151,7 +151,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       }
 
       changed |= this.migrateToEffectSettings(cfg);
-      if (!cfg.isSet(Settings.ROOT)) {
+      // contains(path, true) ignores the defaults from the jar (with copyDefaults on, isSet() counts them too).
+      if (!cfg.contains(Settings.ROOT, true)) {
          // Older config.yml without the per-effect section: write the defaults so they can be edited in the file.
          changed = true;
       }
@@ -189,12 +190,12 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       boolean changed = false;
 
       for (String[] mapping : LEGACY_KEYS) {
-         if (cfg.isSet(mapping[0])) {
+         if (cfg.contains(mapping[0], true)) {
             Object value = cfg.get(mapping[0]);
 
             for (int i = 1; i < mapping.length; i++) {
                String target = Settings.ROOT + "." + mapping[i];
-               if (!cfg.isSet(target)) {
+               if (!cfg.contains(target, true)) {
                   cfg.set(target, value);
                }
             }
@@ -205,12 +206,12 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
          }
       }
 
-      if (cfg.isSet("durations.ritual_duration")) {
+      if (cfg.contains("durations.ritual_duration", true)) {
          int seconds = cfg.getInt("durations.ritual_duration");
 
          for (String effect : EFFECT_KEYS) {
             String target = Settings.ROOT + "." + effect + ".ritual.augmented_seconds";
-            if (!cfg.isSet(target)) {
+            if (!cfg.contains(target, true)) {
                cfg.set(target, seconds);
             }
          }
