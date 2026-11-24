@@ -184,10 +184,7 @@ public class Thunder implements Listener {
 
    @EventHandler
    public void onPlayerAttack(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player attacker
-         && Settings.passive(KEY, "chain_lightning")
-         && this.hasImmortalHackEquipped(attacker)
-         && event.getEntity() instanceof LivingEntity target) {
+      if (event.getDamager() instanceof Player attacker && this.hasImmortalHackEquipped(attacker) && event.getEntity() instanceof LivingEntity target) {
          if (target instanceof Player tp && Infuse.getInstance().getTrustManager().isTrusted(attacker, tp)) {
             return;
          }
@@ -204,7 +201,11 @@ public class Thunder implements Listener {
                this.applyThunderDamage(target, strikeHearts());
                CooldownManager.setCooldown(targetUUID, "lightning", 1L);
                strikeParticles(target.getLocation().add(0.0, 1.0, 0.0));
-               this.chainLightning(target, attacker);
+               // As in 2.4, the toggle (configs.chain_lightning before) only controls the chain to the nearby
+               // entities; the strike on the hit target always happens.
+               if (Settings.passive(KEY, "chain_lightning")) {
+                  this.chainLightning(target, attacker);
+               }
             }
          }
       }

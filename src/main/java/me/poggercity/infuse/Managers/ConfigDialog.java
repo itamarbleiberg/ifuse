@@ -333,6 +333,15 @@ public class ConfigDialog implements CommandExecutor {
       player.showDialog(dialog);
    }
 
+   // 5 in config.yml and 5.0 from a slider are the same setting, so it isn't rewritten or counted as a change.
+   private static boolean sameValue(Object a, Object b) {
+      if (a instanceof Number x && b instanceof Number y) {
+         return Math.abs(x.doubleValue() - y.doubleValue()) < 1.0E-6;
+      } else {
+         return a.equals(b);
+      }
+   }
+
    /** Applies the dialog values. Returns how many settings changed. */
    private int save(String effect, List<Field> fields, DialogResponseView view) {
       FileConfiguration cfg = this.cfg();
@@ -356,7 +365,7 @@ public class ConfigDialog implements CommandExecutor {
             }
          }
 
-         if (newValue != null && !newValue.equals(cfg.get(f.path))) {
+         if (newValue != null && !sameValue(newValue, cfg.get(f.path))) {
             cfg.set(f.path, newValue);
             changed++;
          }

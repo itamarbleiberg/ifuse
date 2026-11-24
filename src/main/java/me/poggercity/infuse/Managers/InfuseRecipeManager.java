@@ -49,6 +49,7 @@ import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.CraftingInventory;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -65,6 +66,8 @@ import org.jetbrains.annotations.NotNull;
 public class InfuseRecipeManager implements Listener {
    /** Scoreboard tag on entities Infuse spawns for ritual beams, so only those are removed on shutdown. */
    public static final String BEAM_TAG = "infuse_ritual_beam";
+   /** recipe_limits.yml section with the number of normal crafts made per effect. */
+   private static final String CRAFTED = "crafted";
    private final JavaPlugin plugin;
    private final File recipeLimitFile;
    private final FileConfiguration recipeLimits;
@@ -72,6 +75,8 @@ public class InfuseRecipeManager implements Listener {
    private final Map<String, ItemStack> standardResults;
    private final Set<Location> protectedBrewingStands = Collections.synchronizedSet(new HashSet<>());
    private final List<ActiveRitual> activeRituals = new ArrayList<>();
+   // Saved rituals that can't run yet (their world isn't loaded); kept as read from rituals.yml.
+   private final List<Map<String, Object>> waitingRituals = new ArrayList<>();
    private final File ritualFile;
    private final Set<NamespacedKey> registeredRecipes = Collections.synchronizedSet(new HashSet<>());
 
@@ -84,6 +89,7 @@ public class InfuseRecipeManager implements Listener {
       this.ritualFile = new File(plugin.getDataFolder(), "rituals.yml");
 
       try {
+         this.migrateCraftLimits();
          this.loadRecipesFromConfig();
          plugin.getServer().getPluginManager().registerEvents(this, plugin);
          this.resumeSavedRituals();
@@ -362,6 +368,11 @@ public class InfuseRecipeManager implements Listener {
          out.set(path + ".elapsed_ticks", r.elapsedTicks);
       }
 
+      // Rituals that couldn't be resumed yet (world not loaded) are written back unchanged instead of being lost.
+      for (Map<String, Object> waiting : this.waitingRituals) {
+         out.createSection("rituals." + i++, waiting);
+      }
+
       try {
          out.save(this.ritualFile);
       } catch (IOException var5) {
@@ -378,23 +389,48 @@ public class InfuseRecipeManager implements Listener {
          if (section != null) {
             for (String id : section.getKeys(false)) {
                ConfigurationSection r = section.getConfigurationSection(id);
-               World world = r == null ? null : Bukkit.getWorld(r.getString("world", ""));
-               if (world == null) {
-                  this.plugin.getLogger().warning("Saved ritual " + id + " is in a world that isn't loaded; skipped");
-               } else {
-                  Location loc = new Location(world, r.getInt("x"), r.getInt("y"), r.getInt("z"));
-                  ActiveRitual ritual = new ActiveRitual(
-                     r.getString("effect", ""),
-                     r.getBoolean("augmented"),
-                     loc,
-                     r.getString("player", "Someone"),
-                     Math.max(1, r.getInt("total_ticks", 1)),
-                     Math.max(0, r.getInt("elapsed_ticks", 0))
-                  );
-                  this.beginRitual(ritual, false);
+               if (r != null) {
+                  this.waitingRituals.add(r.getValues(false));
                }
             }
+
+            this.resumeWaitingRituals();
          }
+      }
+   }
+
+   // Starts the saved rituals whose world is loaded. The others wait (and stay in rituals.yml) until their world is
+   // loaded, for example by a world manager plugin that loads its worlds after Infuse.
+   private void resumeWaitingRituals() {
+      for (Map<String, Object> r : new ArrayList<>(this.waitingRituals)) {
+         String worldName = String.valueOf(r.getOrDefault("world", ""));
+         World world = Bukkit.getWorld(worldName);
+         String effect = String.valueOf(r.getOrDefault("effect", ""));
+         boolean augmented = Boolean.TRUE.equals(r.get("augmented"));
+         if (world == null) {
+            this.plugin.getLogger().info("Saved " + effect + " ritual is in world '" + worldName + "', which isn't loaded yet; it resumes when it loads");
+         } else if (this.rewardFor(effect, augmented) == null) {
+            this.plugin.getLogger().warning("Saved ritual for unknown effect '" + effect + "' kept in rituals.yml (no recipe with that name)");
+         } else {
+            this.waitingRituals.remove(r);
+            Location loc = new Location(world, intOf(r.get("x")), intOf(r.get("y")), intOf(r.get("z")));
+            ActiveRitual ritual = new ActiveRitual(
+               effect, augmented, loc, String.valueOf(r.getOrDefault("player", "Someone")), Math.max(1, intOf(r.get("total_ticks"))),
+               Math.max(0, intOf(r.get("elapsed_ticks")))
+            );
+            this.beginRitual(ritual, false);
+         }
+      }
+   }
+
+   private static int intOf(Object o) {
+      return o instanceof Number n ? n.intValue() : 0;
+   }
+
+   @EventHandler
+   public void onWorldLoad(WorldLoadEvent event) {
+      if (!this.waitingRituals.isEmpty()) {
+         this.resumeWaitingRituals();
       }
    }
 
@@ -579,13 +615,13 @@ public class InfuseRecipeManager implements Listener {
             }
 
             String firstTimeKey = "first_time." + recipeKey;
-            String limitKey = "craft_limit." + recipeKey;
-            int limit = this.plugin.getConfig().getInt("effects." + recipeKey, 3);
-            int remaining = this.recipeLimits.getInt(limitKey, limit);
+            String craftedKey = CRAFTED + "." + recipeKey;
+            int limit = this.getCraftLimit(recipeKey);
+            int crafted = this.recipeLimits.getInt(craftedKey, 0);
             int maxAugments = this.plugin.getConfig().getInt("augments." + recipeKey, 1);
             int usedAugments = this.recipeLimits.getInt(firstTimeKey, 0);
             boolean augmented = maxAugments == -1 || usedAugments < maxAugments;
-            if (!augmented && limit != -1 && remaining <= 0) {
+            if (!augmented && limit != -1 && crafted >= limit) {
                event.setCancelled(true);
                player.sendMessage(ChatColor.RED + "You have reached the crafting limit for this item!");
                return;
@@ -594,12 +630,29 @@ public class InfuseRecipeManager implements Listener {
             boolean ritual = augmented || Settings.ritualSeconds(recipeKey, false) > 0;
             if (!ritual) {
                // Normal effect with no ritual time: crafted right away (the craft itself is done by the game).
+               // A click with something on the cursor can't pick the potion up, so the game crafts nothing; counting
+               // it used up the server-wide craft limit without anyone getting the effect.
+               if (!player.getItemOnCursor().getType().isAir()) {
+                  event.setCancelled(true);
+                  return;
+               }
+
+               // The result slot can still show the augmented effect (it is only refreshed when that player's grid
+               // changes) after someone else used the last augment, so the normal effect is put in before the game
+               // hands it over.
+               ItemStack result = this.standardResults.get(recipeKey);
+               if (result == null) {
+                  event.setCancelled(true);
+                  return;
+               }
+
+               result = result.clone();
+               event.getInventory().setResult(result);
                if (limit != -1) {
-                  this.recipeLimits.set(limitKey, remaining - 1);
+                  this.recipeLimits.set(craftedKey, crafted + 1);
                   this.saveRecipeLimits();
                }
 
-               ItemStack result = event.getRecipe().getResult();
                String disp = result.hasItemMeta() && result.getItemMeta().hasDisplayName() ? result.getItemMeta().getDisplayName() : ChatColor.WHITE + "Effect";
                String itemName = ChatColor.stripColor(disp).replace("Effect", "");
                String color = ChatColor.getLastColors(disp);
@@ -645,7 +698,7 @@ public class InfuseRecipeManager implements Listener {
             if (augmented) {
                this.recipeLimits.set(firstTimeKey, usedAugments + 1);
             } else if (limit != -1) {
-               this.recipeLimits.set(limitKey, remaining - 1);
+               this.recipeLimits.set(craftedKey, crafted + 1);
             }
 
             this.saveRecipeLimits();
@@ -662,9 +715,29 @@ public class InfuseRecipeManager implements Listener {
       return this.firstTimeRewards;
    }
 
+   /** Normal crafts left: the configured limit minus the normal crafts made so far, or -1 when unlimited. */
    public int getCraftsLeft(String recipeKey) {
-      int defaultLimit = this.getCraftLimit(recipeKey);
-      return this.recipeLimits.getInt("craft_limit." + recipeKey, defaultLimit);
+      int limit = this.getCraftLimit(recipeKey);
+      return limit == -1 ? -1 : Math.max(0, limit - this.recipeLimits.getInt(CRAFTED + "." + recipeKey, 0));
+   }
+
+   // recipe_limits.yml used to store the crafts LEFT ("craft_limit.<effect>"), seeded from the config on the first
+   // craft, so changing "effects.<effect>" later did nothing. It now stores the crafts MADE, like the augments, and the
+   // limit always comes from the config. Old files are converted once using the current limits.
+   private void migrateCraftLimits() {
+      ConfigurationSection old = this.recipeLimits.getConfigurationSection("craft_limit");
+      if (old != null) {
+         for (String key : old.getKeys(false)) {
+            int limit = this.getCraftLimit(key);
+            if (!this.recipeLimits.contains(CRAFTED + "." + key) && limit != -1) {
+               this.recipeLimits.set(CRAFTED + "." + key, Math.max(0, limit - old.getInt(key)));
+            }
+         }
+
+         this.recipeLimits.set("craft_limit", null);
+         this.saveRecipeLimits();
+         this.plugin.getLogger().info("recipe_limits.yml: converted crafts left (craft_limit) to crafts made (" + CRAFTED + ")");
+      }
    }
 
    public int getMaxAugments(String recipeKey) {
@@ -696,11 +769,10 @@ public class InfuseRecipeManager implements Listener {
             } else {
                int maxAug = this.plugin.getConfig().getInt("augments." + recipeKey, 1);
                int usedAug = this.recipeLimits.getInt("first_time." + recipeKey, 0);
-               int limit = this.plugin.getConfig().getInt("effects." + recipeKey, 3);
-               int remaining = this.recipeLimits.getInt("craft_limit." + recipeKey, limit);
+               int limit = this.getCraftLimit(recipeKey);
                if (maxAug == -1 || usedAug < maxAug) {
                   event.getInventory().setResult(this.firstTimeRewards.get(recipeKey));
-               } else if (limit != -1 && remaining <= 0) {
+               } else if (limit != -1 && this.getCraftsLeft(recipeKey) <= 0) {
                   event.getInventory().setResult(null);
                } else {
                   event.getInventory().setResult(this.standardResults.get(recipeKey));

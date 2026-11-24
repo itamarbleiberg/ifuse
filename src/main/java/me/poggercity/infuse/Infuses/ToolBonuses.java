@@ -21,6 +21,7 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier.Operation;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -30,11 +31,16 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -218,14 +224,14 @@ public class ToolBonuses implements Listener {
       }
 
       if (!this.pendingLooting.isEmpty()) {
-         for (UUID id : new ArrayList<>(this.pendingLooting)) {
-            Player player = Bukkit.getPlayer(id);
-            if (player != null) {
-               this.revertAll(player);
-            }
+         this.revertPending();
+      }
 
-            this.pendingLooting.remove(id);
-         }
+      // Fallback for an item that left the inventory while it had temporary Looting and came back later (from a
+      // container, an item frame, the ground): whatever a player holds never keeps it for more than a tick.
+      for (Player player : Bukkit.getOnlinePlayers()) {
+         this.revert(player.getInventory().getItemInMainHand());
+         this.revert(player.getItemOnCursor());
       }
    }
 
@@ -254,9 +260,10 @@ public class ToolBonuses implements Listener {
          || Tag.LEAVES.isTagged(type);
    }
 
-   // Fortune is applied when the block's drops are decided, after the break can no longer be cancelled. The drop list
-   // is edited in place so other plugins (auto-pickup and so on) still see the items.
-   @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+   // Fortune is applied when the block's drops are decided, after the break can no longer be cancelled. LOWEST, and
+   // the drop list is edited in place (extra stacks are added as not-yet-spawned items, which Paper spawns with the
+   // rest), so auto-pickup and other drop plugins see the final drops and a cancelled event drops nothing.
+   @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
    public void onBlockDrops(BlockDropItemEvent event) {
       Player player = event.getPlayer();
       ItemStack tool = player.getInventory().getItemInMainHand();
@@ -273,9 +280,9 @@ public class ToolBonuses implements Listener {
             }
 
             List<Item> items = event.getItems();
+            List<Item> unmatched = new ArrayList<>();
 
-            for (int i = items.size() - 1; i >= 0; i--) {
-               Item entity = items.get(i);
+            for (Item entity : items) {
                ItemStack match = null;
 
                for (ItemStack drop : drops) {
@@ -286,17 +293,28 @@ public class ToolBonuses implements Listener {
                }
 
                if (match == null) {
-                  items.remove(i);
+                  unmatched.add(entity);
                } else {
                   entity.setItemStack(match);
                   drops.remove(match);
                }
             }
 
+            // Items the new roll doesn't have take its remaining stacks; any still left over don't drop.
+            for (Item entity : unmatched) {
+               if (drops.isEmpty()) {
+                  items.remove(entity);
+               } else {
+                  entity.setItemStack(drops.remove(0));
+               }
+            }
+
             Location at = event.getBlockState().getLocation().add(0.5, 0.5, 0.5);
 
             for (ItemStack extra : drops) {
-               at.getWorld().dropItemNaturally(at, extra);
+               Item entity = at.getWorld().createEntity(at, Item.class);
+               entity.setItemStack(extra);
+               items.add(entity);
             }
          }
       }
@@ -349,27 +367,56 @@ public class ToolBonuses implements Listener {
    }
 
    // MONITOR: after every other plugin has changed the damage, so we know whether the hit really kills.
+   // Armor stands are skipped: a hit only wobbles them (no death event follows) and they have no loot to boost.
    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
    public void onLethalHit(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player player && event.getEntity() instanceof LivingEntity target && !(target instanceof Player)) {
+      if (event.getDamager() instanceof Player player
+         && event.getEntity() instanceof LivingEntity target
+         && !(target instanceof Player)
+         && !(target instanceof ArmorStand)) {
          ItemStack weapon = player.getInventory().getItemInMainHand();
+         // A weapon still carrying temporary Looting from an earlier hit is put back first, so it never counts for
+         // a kill by someone who doesn't have the bonus.
+         this.revert(weapon);
          int own = weapon.getEnchantmentLevel(Enchantment.LOOTING);
          int bonus = this.bonusLevel(player, weapon, Enchantment.LOOTING);
-         if (bonus > own && this.originalLooting(weapon) == null && event.getFinalDamage() >= target.getHealth() + target.getAbsorptionAmount()) {
+         // The final damage already has absorption taken off, so the hit kills when it reaches the target's health.
+         if (bonus > own && event.getFinalDamage() >= target.getHealth()) {
             ItemMeta meta = weapon.getItemMeta();
             meta.getPersistentDataContainer().set(this.tempLootingKey, PersistentDataType.INTEGER, own);
             meta.addEnchant(Enchantment.LOOTING, bonus, true);
             weapon.setItemMeta(meta);
-            // The loot is rolled in this same tick; it is taken off on the death event, or next tick at the latest.
+            // The loot is rolled inside this same hit. Right after it the death event (or the totem event if the
+            // target is saved) takes the Looting off again; the next tick is only a fallback.
             this.pendingLooting.add(player.getUniqueId());
          }
       }
    }
 
+   private void revertPending() {
+      for (UUID id : new ArrayList<>(this.pendingLooting)) {
+         Player player = Bukkit.getPlayer(id);
+         if (player != null) {
+            this.revertAll(player);
+         }
+
+         this.pendingLooting.remove(id);
+      }
+   }
+
+   // LOWEST: the drops were rolled just before this event, so the Looting can come off before any other plugin runs.
    @EventHandler(priority = EventPriority.LOWEST)
    public void onDeath(EntityDeathEvent event) {
-      if (!(event.getEntity() instanceof Player) && event.getEntity().getKiller() != null) {
-         this.revertAll(event.getEntity().getKiller());
+      if (!this.pendingLooting.isEmpty()) {
+         this.revertPending();
+      }
+   }
+
+   // A target saved by a totem doesn't die, so no death event follows the hit.
+   @EventHandler(priority = EventPriority.MONITOR)
+   public void onResurrect(EntityResurrectEvent event) {
+      if (!event.isCancelled() && !this.pendingLooting.isEmpty()) {
+         this.revertPending();
       }
    }
 
@@ -423,6 +470,37 @@ public class ToolBonuses implements Listener {
    public void onClick(InventoryClickEvent event) {
       if (event.getWhoClicked() instanceof Player player) {
          this.revertAll(player);
+      }
+
+      // Also an item taken out of a container (or any other inventory) that still has temporary Looting.
+      ItemStack current = event.getCurrentItem();
+      if (current != null && this.revert(current)) {
+         event.setCurrentItem(current);
+      }
+   }
+
+   // Right-clicking a block or entity can move the held item somewhere no inventory event sees (decorated pots,
+   // shelves, armor stands), so the Looting comes off first.
+   @EventHandler(priority = EventPriority.LOWEST)
+   public void onInteract(PlayerInteractEvent event) {
+      this.revertAll(event.getPlayer());
+   }
+
+   @EventHandler(priority = EventPriority.LOWEST)
+   public void onInteractAt(PlayerInteractAtEntityEvent event) {
+      this.revertAll(event.getPlayer());
+   }
+
+   @EventHandler(priority = EventPriority.LOWEST)
+   public void onArmorStand(PlayerArmorStandManipulateEvent event) {
+      this.revertAll(event.getPlayer());
+   }
+
+   @EventHandler(priority = EventPriority.LOWEST)
+   public void onPickup(EntityPickupItemEvent event) {
+      ItemStack stack = event.getItem().getItemStack();
+      if (this.revert(stack)) {
+         event.getItem().setItemStack(stack);
       }
    }
 

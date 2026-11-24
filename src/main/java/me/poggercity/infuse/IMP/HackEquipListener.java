@@ -1,5 +1,8 @@
 package me.poggercity.infuse.IMP;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
 import me.poggercity.infuse.Managers.PlayerHackManager;
@@ -15,6 +18,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -24,6 +28,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 public class HackEquipListener implements Listener, CommandExecutor {
    private final PlayerHackManager hackManager = new PlayerHackManager();
+   // Effect a player is drinking, checked at NORMAL priority and equipped at MONITOR.
+   private final Map<UUID, String> pendingEquip = new HashMap<>();
 
    private boolean isPrimaryEffect(String hackName) {
       if (hackName == null) {
@@ -216,12 +222,11 @@ public class HackEquipListener implements Listener, CommandExecutor {
                         return;
                      }
 
-                     this.handleLegendaryHack(player, item, hackName);
                      // The potion is used up without leaving a glass bottle. This used to remove one item from the
                      // MAIN hand a tick later, so drinking an effect from the off-hand deleted whatever was in the
                      // main hand (often a sword).
                      event.setReplacement(new ItemStack(Material.AIR));
-                     player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1.0F, 1.2F);
+                     this.pendingEquip.put(player.getUniqueId(), hackName);
                   }
                } else {
                   player.sendMessage(ChatColor.RED + "You can't swap your effect while you are on cooldown");
@@ -229,6 +234,18 @@ public class HackEquipListener implements Listener, CommandExecutor {
                }
             }
          }
+      }
+   }
+
+   // The effect is equipped only once the drink really happens. Equipping it at NORMAL priority meant a plugin that
+   // cancels the drink later (combat tag, anti-cheat) left the player with the effect and the potion.
+   @EventHandler(priority = EventPriority.MONITOR)
+   public void onPlayerConsumeDone(PlayerItemConsumeEvent event) {
+      Player player = event.getPlayer();
+      String hackName = this.pendingEquip.remove(player.getUniqueId());
+      if (hackName != null && !event.isCancelled()) {
+         this.handleLegendaryHack(player, event.getItem(), hackName);
+         player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1.0F, 1.2F);
       }
    }
 
