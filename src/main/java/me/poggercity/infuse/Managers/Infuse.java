@@ -324,6 +324,10 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
          this.getCommand("rspark").setExecutor(this.abilitiesHandler);
       }
 
+      if (this.getCommand("infuseconfig") != null) {
+         this.getCommand("infuseconfig").setExecutor(new ConfigDialog(this));
+      }
+
       if (this.getCommand("controls") != null) {
          this.getCommand("controls").setExecutor(new CommandExecutor() {
             public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {

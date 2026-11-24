@@ -54,8 +54,16 @@ commands:
     description: Force-start an augmented ritual at a brewing stand.
     usage: /start_ritual <effectKey> [x y z]
     permission: infuse.startritual
+  infuseconfig:
+    description: Opens the in-game settings editor (effects, particles, passives, rituals).
+    usage: /infuseconfig [effect]
+    aliases: [infusesettings]
+    permission: infuse.config
 
 permissions:
+  infuse.config:
+    description: Allows changing Infuse settings with /infuseconfig.
+    default: op
   ability.use:
     description: Allows the player to use abilities.
     default: false
