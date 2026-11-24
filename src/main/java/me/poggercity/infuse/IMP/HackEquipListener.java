@@ -88,31 +88,13 @@ public class HackEquipListener implements Listener, CommandExecutor {
          int cooldownSeconds = Infuse.getInstance().getConfig().getInt("configs.drain_cooldown", 300);
          CooldownManager.setCooldown(player.getUniqueId(), "unequip", cooldownSeconds);
          ItemStack item2 = hackMapping != null ? hackMapping.createItem() : null;
-         Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> {
-            if (item2 != null) {
-               if (player.getInventory().firstEmpty() != -1) {
-                  player.getInventory().addItem(new ItemStack[]{item2});
-               } else {
-                  player.getWorld().dropItemNaturally(player.getLocation(), item2);
-                  player.sendMessage(ChatColor.RED + "Your inventory was full, so the effect was dropped!");
-               }
-            }
-         }, 5L);
          this.hackManager.setHack(player.getUniqueId(), "1", hackName);
-         Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> {
-            if (!this.hasVirusGlitchGemEquipped(player, "1") || !this.hasVirusGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(20.0);
-            } else if (this.hasVirusGlitchGemEquipped(player, "1") || this.hasVirusGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(30.0);
-            }
-         }, 20L);
-         Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> {
-            if (!this.hasOceanGlitchGemEquipped(player, "1") || !this.hasOceanGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY).setBaseValue(0.0);
-            } else if (this.hasOceanGlitchGemEquipped(player, "1") || this.hasOceanGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY).setBaseValue(1.0);
-            }
-         }, 20L);
+         // The replaced effect is handed back right away. It used to be given 5 ticks later, so logging out in
+         // between lost it. Max health and swim speed are no longer set here: the old code set max health to 20 for
+         // Heart players (the condition used || instead of &&); Heart and Ocean keep those values up to date.
+         if (item2 != null) {
+            giveOrDrop(player, item2);
+         }
       } else if (hasTier1) {
          if (!this.canEquipWithRestriction(player, hackName, "2")) {
             player.sendMessage(ChatColor.RED + "Cannot equip: Only one primary effect allowed!");
@@ -129,6 +111,15 @@ public class HackEquipListener implements Listener, CommandExecutor {
          this.equipHack(player, item, hackName, "1");
       } else {
          this.equipHack(player, item, hackName, "1");
+      }
+   }
+
+   /** Puts the item in the player's inventory, or drops it at their feet if there is no room. */
+   public static void giveOrDrop(Player player, ItemStack item) {
+      for (ItemStack left : player.getInventory().addItem(new ItemStack[]{item}).values()) {
+         Item dropped = player.getWorld().dropItemNaturally(player.getLocation(), left);
+         dropped.setInvulnerable(true);
+         player.sendMessage(ChatColor.RED + "Your inventory was full, so the effect was dropped!");
       }
    }
 
@@ -226,17 +217,11 @@ public class HackEquipListener implements Listener, CommandExecutor {
                      }
 
                      this.handleLegendaryHack(player, item, hackName);
-                     this.consumeMainHandItem(player);
+                     // The potion is used up without leaving a glass bottle. This used to remove one item from the
+                     // MAIN hand a tick later, so drinking an effect from the off-hand deleted whatever was in the
+                     // main hand (often a sword).
+                     event.setReplacement(new ItemStack(Material.AIR));
                      player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1.0F, 1.2F);
-                     Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> {
-                        ItemStack mainHand = player.getInventory().getItemInMainHand();
-                        ItemStack offHand = player.getInventory().getItemInOffHand();
-                        if (this.isSameItem(mainHand, item)) {
-                           player.getInventory().setItemInMainHand((ItemStack)null);
-                        } else if (this.isSameItem(offHand, item)) {
-                           player.getInventory().setItemInOffHand((ItemStack)null);
-                        }
-                     }, 1L);
                   }
                } else {
                   player.sendMessage(ChatColor.RED + "You can't swap your effect while you are on cooldown");

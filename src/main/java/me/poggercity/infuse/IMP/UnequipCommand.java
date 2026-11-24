@@ -68,26 +68,15 @@ public class UnequipCommand implements CommandExecutor, Listener {
                   CooldownManager.setCooldown(player.getUniqueId(), "unequip", cooldownSeconds);
                   this.hackManager.removeHack(player.getUniqueId(), hackType);
                   player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1.0F, 1.2F);
-                  Location anchor = player.getLocation();
-                  Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
-                     HackMapping mapping = HackMapping.fromHackName(currentHack);
-                     if (mapping != null) {
-                        ItemStack glitchItem = mapping.createItem();
-                        if (glitchItem != null) {
-                           player.getInventory().addItem(new ItemStack[]{glitchItem});
-                        }
+                  // Given right away (was 10 ticks later, so logging out in between lost the effect). Max health and
+                  // swim speed follow the equipped effects on their own now.
+                  HackMapping mapping = HackMapping.fromHackName(currentHack);
+                  if (mapping != null) {
+                     ItemStack glitchItem = mapping.createItem();
+                     if (glitchItem != null) {
+                        HackEquipListener.giveOrDrop(player, glitchItem);
                      }
-                  }, 10L);
-                  Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
-                     if (!this.hasVirusGlitchGemEquipped(player, "1") && !this.hasVirusGlitchGemEquipped(player, "2")) {
-                        player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(20.0);
-                     }
-                  }, 20L);
-                  Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
-                     if (!this.hasOceanGlitchGemEquipped(player, "1") || !this.hasOceanGlitchGemEquipped(player, "2")) {
-                        player.getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY).setBaseValue(0.0);
-                     }
-                  }, 20L);
+                  }
                   return true;
                } else {
                   long secondsLeft = CooldownManager.getCooldownTimeLeft(player.getUniqueId(), "unequip") / 1000L;

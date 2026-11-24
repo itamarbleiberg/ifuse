@@ -29,6 +29,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -197,7 +198,15 @@ public class SwordBringer implements Listener, CommandExecutor {
       if (event.getWhoClicked() instanceof Player) {
          Player player = (Player)event.getWhoClicked();
          Inventory clickedInventory = event.getClickedInventory();
+         // For non-ops every click in this menu is cancelled. Before, a click during the 1 second pick cooldown was
+         // let through (so potions could be taken out of the menu), and clicking a potion in the player's own
+         // inventory equipped it without using it up.
+         if (event.getView().getTitle().equals("§lEffects") && !player.isOp()) {
+            event.setCancelled(true);
+         }
+
          if (clickedInventory != null
+            && clickedInventory.equals(event.getView().getTopInventory())
             && event.getView().getTitle().equals("§lEffects")
             && !CooldownManager.isOnCooldown(player.getUniqueId(), "pickinganeffectlol")
             && !player.isOp()) {
@@ -270,6 +279,13 @@ public class SwordBringer implements Listener, CommandExecutor {
             CooldownManager.setCooldown(player.getUniqueId(), "pickinganeffectlol", 1L);
             event.setCancelled(true);
          }
+      }
+   }
+
+   @EventHandler
+   public void onInventoryDrag(InventoryDragEvent event) {
+      if (event.getView().getTitle().equals("§lEffects") && !event.getWhoClicked().isOp()) {
+         event.setCancelled(true);
       }
    }
 

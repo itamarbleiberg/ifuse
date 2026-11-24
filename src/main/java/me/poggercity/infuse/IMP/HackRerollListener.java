@@ -22,6 +22,11 @@ import me.poggercity.infuse.Infuses.Thunder;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.PlayerHackManager;
 import org.bukkit.Bukkit;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.EventPriority;
+import org.bukkit.NamespacedKey;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -52,6 +57,49 @@ public class HackRerollListener implements Listener, CommandExecutor {
    public HackRerollListener(JavaPlugin plugin, HackEquipListener hackEquipListener) {
       this.plugin = plugin;
       this.hackEquipListener = hackEquipListener;
+   }
+
+   private static final String NORMAL_TITLE = ChatColor.BOLD + "Choose your Effect";
+   private static final String AUGMENTED_TITLE = ChatColor.BOLD + "Choose your Augmented Effect";
+
+   private NamespacedKey pendingKey() {
+      return new NamespacedKey(this.plugin, "pending_augmented_pick");
+   }
+
+   public static boolean isSelector(ItemStack item) {
+      if (item != null && item.getType() == Material.DRAGON_BREATH) {
+         ItemMeta meta = item.getItemMeta();
+         return meta != null && meta.hasDisplayName() && meta.getDisplayName().equals(ChatColor.LIGHT_PURPLE.toString() + ChatColor.BOLD + "Choose your Effect");
+      } else {
+         return false;
+      }
+   }
+
+   private boolean hasPendingPick(Player player) {
+      return player.getPersistentDataContainer().has(this.pendingKey(), PersistentDataType.BYTE);
+   }
+
+   // The selector GUIs can't be used to move items: clicks in the player's own inventory used to be allowed, so the
+   // selector could be moved out of the hand before the second pick and was never used up.
+   @EventHandler(priority = EventPriority.LOWEST)
+   public void onSelectorDrag(InventoryDragEvent event) {
+      String title = event.getView().getTitle();
+      if (title.equals(NORMAL_TITLE) || title.equals(AUGMENTED_TITLE)) {
+         event.setCancelled(true);
+      }
+   }
+
+   // A player who left before the second (augmented) pick gets the menu again when they come back.
+   @EventHandler
+   public void onJoinWithPendingPick(PlayerJoinEvent event) {
+      Player player = event.getPlayer();
+      if (this.hasPendingPick(player)) {
+         Bukkit.getRegionScheduler().runDelayed(this.plugin, player.getLocation(), task -> {
+            if (player.isOnline() && this.hasPendingPick(player)) {
+               this.openAugmentedInfuses(player);
+            }
+         }, 40L);
+      }
    }
 
    private boolean nameIs(ItemStack item, String plainName) {
@@ -221,7 +269,12 @@ public class HackRerollListener implements Listener, CommandExecutor {
                }
 
                player.swingMainHand();
-               this.openInfuses(player);
+               if (this.hasPendingPick(player)) {
+                  this.openAugmentedInfuses(player);
+               } else {
+                  this.openInfuses(player);
+               }
+
                return;
             }
          }
@@ -232,15 +285,32 @@ public class HackRerollListener implements Listener, CommandExecutor {
    public void onInventoryClick(InventoryClickEvent event) {
       if (event.getWhoClicked() instanceof Player) {
          Player player = (Player)event.getWhoClicked();
+         String title = event.getView().getTitle();
+         if (title.equals(NORMAL_TITLE)) {
+            event.setCancelled(true);
+         }
+
          if (event.getClickedInventory() != null && event.getClickedInventory().equals(event.getView().getTopInventory())) {
-            String title = event.getView().getTitle();
-            if (title.equals(ChatColor.BOLD + "Choose your Effect")) {
-               event.setCancelled(true);
+            if (title.equals(NORMAL_TITLE)) {
                ItemStack clickedItem = event.getCurrentItem();
                if (clickedItem != null
                   && clickedItem.getType() != Material.MAGENTA_STAINED_GLASS_PANE
                   && clickedItem.getType() != Material.ORANGE_STAINED_GLASS_PANE
                   && clickedItem.getType() != Material.BLACK_STAINED_GLASS_PANE) {
+                  // The selector is used up on the first pick, before anything is equipped. It used to be removed
+                  // only after the second (augmented) pick, from whatever was in the hand at that moment, so leaving
+                  // the game or moving the selector first meant it was never used up. Picking again with both slots
+                  // full gives back the old effect as an item, so this made unlimited effect potions.
+                  ItemStack hand = player.getInventory().getItemInMainHand();
+                  if (!isSelector(hand)) {
+                     player.closeInventory();
+                     player.sendMessage(ChatColor.RED + "Hold the effect selector to choose an effect.");
+                     return;
+                  }
+
+                  hand.setAmount(hand.getAmount() - 1);
+                  player.getPersistentDataContainer().set(this.pendingKey(), PersistentDataType.BYTE, (byte)1);
+
                   if (Frost.isStealthGem(clickedItem)) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Frost Effect");
                   } else if (Emerald.isInvincibilityGem(clickedItem)) {
@@ -284,15 +354,26 @@ public class HackRerollListener implements Listener, CommandExecutor {
    public void onInventoryClick2(InventoryClickEvent event) {
       if (event.getWhoClicked() instanceof Player) {
          Player player = (Player)event.getWhoClicked();
+         String title = event.getView().getTitle();
+         if (title.equals(AUGMENTED_TITLE)) {
+            event.setCancelled(true);
+         }
+
          if (event.getClickedInventory() != null && event.getClickedInventory().equals(event.getView().getTopInventory())) {
-            String title = event.getView().getTitle();
-            if (title.equals(ChatColor.BOLD + "Choose your Augmented Effect")) {
-               event.setCancelled(true);
+            if (title.equals(AUGMENTED_TITLE)) {
                ItemStack clickedItem = event.getCurrentItem();
                if (clickedItem != null
                   && clickedItem.getType() != Material.MAGENTA_STAINED_GLASS_PANE
                   && clickedItem.getType() != Material.ORANGE_STAINED_GLASS_PANE
                   && clickedItem.getType() != Material.BLACK_STAINED_GLASS_PANE) {
+                  // Only reachable after a first pick that used up a selector.
+                  if (!this.hasPendingPick(player)) {
+                     CooldownManager.setCooldown(player.getUniqueId(), "ehhefbdha", 1L);
+                     player.closeInventory();
+                     return;
+                  }
+
+                  player.getPersistentDataContainer().remove(this.pendingKey());
                   if (Augmented.ISFROST(clickedItem)) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Frost Effect");
                   } else if (Augmented.ISEME(clickedItem)) {
@@ -328,9 +409,6 @@ public class HackRerollListener implements Listener, CommandExecutor {
                   CooldownManager.setCooldown(player.getUniqueId(), "ehhefbdha", 1L);
                   player.closeInventory();
                   this.effect(player);
-                  ItemStack heldItem = player.getInventory().getItemInMainHand();
-                  Location anchor = player.getLocation();
-                  Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> heldItem.setAmount(heldItem.getAmount() - 1), 1L);
                   CooldownManager.setCooldown(player.getUniqueId(), "selector", 1L);
                }
             }
@@ -344,9 +422,13 @@ public class HackRerollListener implements Listener, CommandExecutor {
          Player player = (Player)event.getPlayer();
          if (!CooldownManager.isOnCooldown(player.getUniqueId(), "ehhefbdha")) {
             String title = event.getView().getTitle();
-            if (title.equals(ChatColor.BOLD + "Choose your Augmented Effect")) {
+            if (title.equals(AUGMENTED_TITLE) && this.hasPendingPick(player)) {
                Location anchor = player.getLocation();
-               Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> player.openInventory(event.getInventory()), 1L);
+               Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
+                  if (player.isOnline() && this.hasPendingPick(player)) {
+                     player.openInventory(event.getInventory());
+                  }
+               }, 1L);
             }
          }
       }
