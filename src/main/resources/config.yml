@@ -1,0 +1,256 @@
+# ██████╗░██╗░░░██╗██████╗░░█████╗░░██████╗░░██████╗░███████╗██████╗░░█████╗░██╗████████╗██╗░░░██╗
+# ██╔══██╗╚██╗░██╔╝██╔══██╗██╔══██╗██╔════╝░██╔════╝░██╔════╝██╔══██╗██╔══██╗██║╚══██╔══╝╚██╗░██╔╝
+# ██████╦╝░╚████╔╝░██████╔╝██║░░██║██║░░██╗░██║░░██╗░█████╗░░██████╔╝██║░░╚═╝██║░░░██║░░░░╚████╔╝░
+# ██╔══██╗░░╚██╔╝░░██╔═══╝░██║░░██║██║░░╚██╗██║░░╚██╗██╔══╝░░██╔══██╗██║░░██╗██║░░░██║░░░░░╚██╔╝░░
+# ██████╦╝░░░██║░░░██║░░░░░╚█████╔╝╚██████╔╝╚██████╔╝███████╗██║░░██║╚█████╔╝██║░░░██║░░░░░░██║░░░
+# ╚═════╝░░░░╚═╝░░░╚═╝░░░░░░╚════╝░░╚═════╝░░╚═════╝░╚══════╝╚═╝░░╚═╝░╚════╝░╚═╝░░░╚═╝░░░░░░╚═╝░░░
+
+configs:
+  brewing_beam: true
+  drain_cooldown: 60
+  default_offhand_for_ability: false
+  cant_unequip_while_on_cooldown: false
+  only_allow_one_primary: false
+  haste_enchant: true
+  emerald_enchant: true
+  drop_effects_on_death: 1
+  random_effect_on_join: false
+  random_secondary_effect_on_join: false
+  random_primary_effect_on_join: false
+  roll_enable_ender: true
+  roll_enable_apophis: true
+  chain_lightning: true
+  action_bar_update_time: 1
+  event_update_time: 1
+  apophis_enabled: true
+  fire_lava_fly: true
+  apophis_lava_fly: true
+
+  disabled_worlds:
+    - lobby
+
+augments:
+  emerald: 1
+  feather: 1
+  fire: 1
+  frost: 1
+  haste: 1
+  heart: 1
+  invis: 1
+  ocean: 1
+  regen: 1
+  speed: 1
+  strength: 1
+  thunder: 1
+  ender: 0
+  apophis: 1
+
+effects:
+  emerald: 3
+  feather: 3
+  fire: 3
+  frost: 3
+  haste: 3
+  heart: 3
+  invis: 3
+  ocean: 3
+  regen: 3
+  speed: 3
+  strength: 3
+  thunder: 3
+  ender: 1
+  apophis: 1
+
+damage:
+  thunder: 4
+  feather_spark: 8
+  ocean_drown: 4
+  increasing_fire_damage_multiplier: 1.3
+  max_fire_damage_multiplier: 3.0
+  fire_launch_strength: 4.0
+  trident_pull_strength: 1.5
+  speed_dash_strength: 1
+  feather_mace: 1.5
+  dragon: 4
+  apophis_wither_duration: 15
+  apophis_area_duration: 20
+  thunder_hearts: 1.0
+
+durations:
+  dragon_curse_duration: 7
+  ritual_duration: 600
+  fire_spark: 4
+  frost_spark: 10
+  heart_spark: 60
+  emerald_spark: 10
+  invis_spark: 10
+  ocean_spark: 5
+  regen_spark: 30
+  strength_spark: 15
+  thunder_spark: 10
+  haste_spark: 15
+  apophis_spark: 20
+
+cooldowns:
+  fire_spark: 60
+  frost_spark: 90
+  heart_spark: 120
+  emerald_spark: 30
+  invis_spark: 90
+  ocean_spark: 90
+  regen_spark: 60
+  strength_spark: 60
+  thunder_spark: 90
+  haste_spark: 60
+  feather_spark: 40
+  speed_spark: 20
+  ender_spark: 10
+  ender_dragon_breath: 30
+  apophis_spark: 90
+
+radius:
+  fire: 5.0
+  invis: 10.0
+  ocean: 15.0
+  ocean_drown: 5.0
+  thunder: 7.0
+  feather: 4.0
+  frost: 5.0
+  ender: 50.0
+  apophis: 5.0
+
+recipes:
+  emerald:
+    key: emerald
+    shape: ["WSW","OEO","CTC"]
+    ingredients:
+      W: WILD_ARMOR_TRIM_SMITHING_TEMPLATE
+      S: SNIFFER_EGG
+      E: EMERALD_BLOCK
+      O: OMINOUS_BOTTLE
+      C: ENDER_CHEST
+      T: ENCHANTING_TABLE
+
+  feather:
+    key: feather
+    shape: ["BPB","FHF","BPB"]
+    ingredients:
+      B: BREEZE_ROD
+      P: PHANTOM_MEMBRANE
+      H: HEAVY_CORE
+      F: FEATHER
+
+  fire:
+    key: fire
+    shape: ["URU","NPN","URU"]
+    ingredients:
+      U: NETHERITE_UPGRADE_SMITHING_TEMPLATE
+      R: RESPAWN_ANCHOR
+      N: NETHERITE_INGOT
+      P: MUSIC_DISC_PIGSTEP
+
+  frost:
+    key: frost
+    shape: ["TPT","HDH","TPT"]
+    ingredients:
+      P: PEARLESCENT_FROGLIGHT
+      T: FLOW_ARMOR_TRIM_SMITHING_TEMPLATE
+      H: GOAT_HORN
+      D: MUSIC_DISC_CREATOR
+
+  haste:
+    key: haste
+    shape: ["DBD","GEG","DND"]
+    ingredients:
+      D: DIAMOND_BLOCK
+      B: BEACON
+      G: GOLD_BLOCK
+      E: DEEPSLATE_EMERALD_ORE
+      N: NETHERITE_PICKAXE
+
+  heart:
+    key: heart
+    shape: ["PTP","EBE","PTP"]
+    ingredients:
+      P: POTION
+      E: ENCHANTED_GOLDEN_APPLE
+      B: BEETROOT
+      T: TOTEM_OF_UNDYING
+
+  invis:
+    key: invis
+    shape: ["EME","SOS","ERE"]
+    ingredients:
+      E: ENDER_EYE
+      M: MUSIC_DISC_5
+      R: RECOVERY_COMPASS
+      S: SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE
+      O: OMINOUS_TRIAL_KEY
+
+  ocean:
+    key: ocean
+    shape: ["EHE","TCT","EHE"]
+    ingredients:
+      E: TIDE_ARMOR_TRIM_SMITHING_TEMPLATE
+      H: HEART_OF_THE_SEA
+      T: TRIDENT
+      C: CONDUIT
+
+  regen:
+    key: regen
+    shape: ["EHE","PAP","EME"]
+    ingredients:
+      E: END_CRYSTAL
+      H: HONEY_BLOCK
+      P: PEARLESCENT_FROGLIGHT
+      A: AXOLOTL_BUCKET
+      M: MUSIC_DISC_CREATOR_MUSIC_BOX
+
+  speed:
+    key: speed
+    shape: ["RSR","DHE","RNR"]
+    ingredients:
+      R: RABBIT_FOOT
+      S: SADDLE
+      D: DUNE_ARMOR_TRIM_SMITHING_TEMPLATE
+      H: DIAMOND_HORSE_ARMOR
+      E: EYE_ARMOR_TRIM_SMITHING_TEMPLATE
+      N: NETHERITE_BOOTS
+
+  strength:
+    key: strength
+    shape: ["PRP","SWA","PRP"]
+    ingredients:
+      P: PLAYER_HEAD
+      R: RIB_ARMOR_TRIM_SMITHING_TEMPLATE
+      S: NETHERITE_SWORD
+      W: WITHER_ROSE
+      A: NETHERITE_AXE
+
+  thunder:
+    key: thunder
+    shape: ["BLB","TCT","BLB"]
+    ingredients:
+      B: BOLT_ARMOR_TRIM_SMITHING_TEMPLATE
+      L: LODESTONE
+      C: CREEPER_HEAD
+      T: TRIDENT
+
+  ender:
+    key: ender
+    shape: ["HSH","SDS","HSH"]
+    ingredients:
+      S: SPIRE_ARMOR_TRIM_SMITHING_TEMPLATE
+      D: DRAGON_EGG
+      H: DRAGON_HEAD
+
+  apophis:
+    key: apophis
+    shape: ["ABA","BCB","DBE"]
+    ingredients:
+      A: NETHERITE_UPGRADE_SMITHING_TEMPLATE
+      B: NETHERITE_BLOCK
+      C: NETHER_STAR
+      D: MUSIC_DISC_OTHERSIDE
+      E: ENCHANTED_BOOK
+    
