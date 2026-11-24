@@ -1,5 +1,10 @@
 package me.poggercity.infuse.Managers;
 
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.entity.Entity;
+import java.util.ArrayList;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
@@ -66,7 +71,8 @@ public class InfuseRecipeManager implements Listener {
    private final Map<String, ItemStack> firstTimeRewards;
    private final Map<String, ItemStack> standardResults;
    private final Set<Location> protectedBrewingStands = Collections.synchronizedSet(new HashSet<>());
-   private final Map<String, Boolean> activeRituals = Collections.synchronizedMap(new HashMap<>());
+   private final List<ActiveRitual> activeRituals = new ArrayList<>();
+   private final File ritualFile;
    private final Set<NamespacedKey> registeredRecipes = Collections.synchronizedSet(new HashSet<>());
 
    public InfuseRecipeManager(JavaPlugin plugin) {
@@ -75,10 +81,12 @@ public class InfuseRecipeManager implements Listener {
       this.recipeLimits = YamlConfiguration.loadConfiguration(this.recipeLimitFile);
       this.firstTimeRewards = new HashMap<>();
       this.standardResults = new HashMap<>();
+      this.ritualFile = new File(plugin.getDataFolder(), "rituals.yml");
 
       try {
          this.loadRecipesFromConfig();
          plugin.getServer().getPluginManager().registerEvents(this, plugin);
+         this.resumeSavedRituals();
          plugin.getLogger().info("InfuseRecipeManager initialized successfully");
       } catch (Exception var3) {
          plugin.getLogger().severe("Failed to initialize InfuseRecipeManager: " + var3.getMessage());
@@ -118,127 +126,267 @@ public class InfuseRecipeManager implements Listener {
       }
    }
 
-   private void spawnCustomBeam(Location brewingStandLocation) {
-      if (this.plugin.getConfig().getBoolean("configs.brewing_beam", true)) {
-         World world = brewingStandLocation.getWorld();
-         Location crystalLoc = new Location(world, brewingStandLocation.getX(), 600.0, brewingStandLocation.getZ());
-         Bukkit.getRegionScheduler().execute(this.plugin, brewingStandLocation, () -> {
-            EnderCrystal crystal = (EnderCrystal)world.spawnEntity(crystalLoc, EntityType.END_CRYSTAL);
-            crystal.setShowingBottom(false);
-            crystal.setInvulnerable(true);
-            crystal.setInvisible(true);
-            Location targetLoc = brewingStandLocation.clone().subtract(0.0, 2.0, 0.0);
-            ArmorStand marker = (ArmorStand)world.spawnEntity(targetLoc, EntityType.ARMOR_STAND);
-            marker.setMarker(true);
-            marker.setInvisible(true);
-            marker.setInvulnerable(true);
-            marker.setSilent(true);
-            marker.setCustomNameVisible(false);
-            crystal.setBeamTarget(marker.getLocation().toBlockLocation());
-            int ritualDurationSeconds = this.plugin.getConfig().getInt("durations.ritual_duration", 600);
-            Bukkit.getGlobalRegionScheduler().runDelayed(this.plugin, task -> Bukkit.getRegionScheduler().execute(this.plugin, brewingStandLocation, () -> {
-               if (!crystal.isDead()) {
-                  crystal.remove();
-               }
+   /** A ritual in progress at a brewing stand. Saved to rituals.yml on shutdown and resumed on startup. */
+   private static final class ActiveRitual {
+      final String effect;
+      final boolean augmented;
+      final Location location;
+      final String playerName;
+      final int totalTicks;
+      int elapsedTicks;
+      BossBar bossBar;
+      ScheduledTask task;
+      final List<Entity> beam = new ArrayList<>();
 
-               if (!marker.isDead()) {
-                  marker.remove();
-               }
-            }), ritualDurationSeconds * 20L);
-         });
+      ActiveRitual(String effect, boolean augmented, Location location, String playerName, int totalTicks, int elapsedTicks) {
+         this.effect = effect;
+         this.augmented = augmented;
+         this.location = location;
+         this.playerName = playerName;
+         this.totalTicks = totalTicks;
+         this.elapsedTicks = elapsedTicks;
       }
    }
 
-   private void startRitual(Player player, String recipeKey, Location brewingStandLocation, ItemStack craftedItem) {
-      if (brewingStandLocation == null) {
-         player.sendMessage(ChatColor.RED + "You need to craft this in a brewing stand!");
-      } else {
-         this.protectedBrewingStands.add(brewingStandLocation.getBlock().getLocation());
-         this.activeRituals.put("Augmented", true);
-         ItemMeta meta = craftedItem.getItemMeta();
-         String displayName = meta != null && meta.hasDisplayName() ? meta.getDisplayName() : ChatColor.WHITE + "Augmented Effect";
-         String itemName = displayName.replace("Effect", "");
-         BarColor barColor = this.getColorFromItemName(itemName);
-         String colorOnly = ChatColor.getLastColors(itemName);
-         String formattedItemName = ChatColor.BOLD.toString() + colorOnly + "\ud83e\uddea " + ChatColor.stripColor(itemName) + " \ud83e\uddea";
-         BossBar bossBar = Bukkit.createBossBar(formattedItemName, barColor, BarStyle.SOLID, new BarFlag[0]);
+   private static String dimensionLabel(World world) {
+      return switch (world.getEnvironment()) {
+         case NORMAL -> ChatColor.GREEN + "Overworld";
+         case NETHER -> ChatColor.DARK_RED + "Nether";
+         case THE_END -> ChatColor.DARK_PURPLE + "End";
+         default -> ChatColor.GRAY + world.getName();
+      };
+   }
 
-         for (Player p : Bukkit.getOnlinePlayers()) {
-            bossBar.addPlayer(p);
+   private void spawnCustomBeam(ActiveRitual ritual) {
+      if (this.plugin.getConfig().getBoolean("configs.brewing_beam", true)) {
+         Location brewingStandLocation = ritual.location.clone().add(0.5, 0.5, 0.5);
+         World world = brewingStandLocation.getWorld();
+         Location crystalLoc = new Location(world, brewingStandLocation.getX(), 600.0, brewingStandLocation.getZ());
+         EnderCrystal crystal = (EnderCrystal)world.spawnEntity(crystalLoc, EntityType.END_CRYSTAL);
+         crystal.setShowingBottom(false);
+         crystal.setInvulnerable(true);
+         crystal.setInvisible(true);
+         // Tagged and not saved with the chunk, so only these are removed on shutdown (the old code removed every
+         // end crystal in every world) and none are left behind after a crash.
+         crystal.addScoreboardTag(BEAM_TAG);
+         crystal.setPersistent(false);
+         Location targetLoc = brewingStandLocation.clone().subtract(0.0, 2.0, 0.0);
+         ArmorStand marker = (ArmorStand)world.spawnEntity(targetLoc, EntityType.ARMOR_STAND);
+         marker.setMarker(true);
+         marker.setInvisible(true);
+         marker.setInvulnerable(true);
+         marker.setSilent(true);
+         marker.setCustomNameVisible(false);
+         marker.addScoreboardTag(BEAM_TAG);
+         marker.setPersistent(false);
+         crystal.setBeamTarget(marker.getLocation().toBlockLocation());
+         ritual.beam.add(crystal);
+         ritual.beam.add(marker);
+      }
+   }
+
+   private static void removeBeam(ActiveRitual ritual) {
+      for (Entity e : ritual.beam) {
+         if (e.isValid()) {
+            e.remove();
          }
+      }
 
-         Environment env = brewingStandLocation.getWorld().getEnvironment();
+      ritual.beam.clear();
+   }
 
+   private ItemStack rewardFor(String effect, boolean augmented) {
+      ItemStack item = augmented ? this.firstTimeRewards.get(effect) : this.standardResults.get(effect);
+      return item == null ? null : item.clone();
+   }
+
+   private boolean anyRitualRunning() {
+      return !this.activeRituals.isEmpty();
+   }
+
+   private boolean oneAtATime() {
+      return this.plugin.getConfig().getBoolean("rituals.one_at_a_time", true);
+   }
+
+   /** Starts a ritual. Ritual length comes from effect_settings.<effect>.ritual (augmented_seconds / normal_seconds). */
+   private void startRitual(Player player, String recipeKey, Location brewingStand, boolean augmented) {
+      int seconds = Settings.ritualSeconds(recipeKey, augmented);
+      ActiveRitual ritual = new ActiveRitual(
+         recipeKey, augmented, brewingStand.getBlock().getLocation(), player.getName(), Math.max(1, seconds * 20), 0
+      );
+      this.beginRitual(ritual, true);
+   }
+
+   private void beginRitual(ActiveRitual ritual, boolean announce) {
+      ItemStack reward = this.rewardFor(ritual.effect, ritual.augmented);
+      if (reward == null) {
+         this.plugin.getLogger().warning("Ritual for unknown effect '" + ritual.effect + "' dropped");
+         return;
+      }
+
+      Location blockLoc = ritual.location;
+      this.protectedBrewingStands.add(blockLoc);
+      this.activeRituals.add(ritual);
+      ItemMeta meta = reward.getItemMeta();
+      String displayName = meta != null && meta.hasDisplayName() ? meta.getDisplayName() : ChatColor.WHITE + "Effect";
+      String itemName = displayName.replace("Effect", "");
+      BarColor barColor = this.getColorFromItemName(itemName);
+      String colorOnly = ChatColor.getLastColors(itemName);
+      String formattedItemName = ChatColor.BOLD.toString() + colorOnly + "\ud83e\uddea " + ChatColor.stripColor(itemName) + " \ud83e\uddea";
+      BossBar bossBar = Bukkit.createBossBar(formattedItemName, barColor, BarStyle.SOLID, new BarFlag[0]);
+      ritual.bossBar = bossBar;
+
+      for (Player p : Bukkit.getOnlinePlayers()) {
+         bossBar.addPlayer(p);
+      }
+
+      World world = blockLoc.getWorld();
+      Location soundLoc = blockLoc.clone().add(0.5, 0.5, 0.5);
+      if (announce) {
          Bukkit.broadcastMessage(
             colorOnly
                + "\ud83e\uddea "
-               + player.getName()
+               + ritual.playerName
                + " is cooking up the "
                + itemName
                + " at "
                + ChatColor.BOLD
                + ChatColor.AQUA
-               + brewingStandLocation.getBlockX()
+               + blockLoc.getBlockX()
                + ", "
-               + brewingStandLocation.getBlockY()
+               + blockLoc.getBlockY()
                + ", "
-               + brewingStandLocation.getBlockZ()
+               + blockLoc.getBlockZ()
                + "... "
-               + switch (env) {
-                  case NORMAL -> ChatColor.GREEN + "Overworld";
-                  case NETHER -> ChatColor.DARK_RED + "Nether";
-                  case THE_END -> ChatColor.DARK_PURPLE + "End";
-                  default -> ChatColor.GRAY + brewingStandLocation.getWorld().getName();
-               }
+               + dimensionLabel(world)
          );
-         Location playerLocation = player.getLocation();
 
-         for (Player p : player.getWorld().getPlayers()) {
-            Bukkit.getRegionScheduler().execute(this.plugin, p.getLocation(), () -> p.playSound(playerLocation, Sound.BLOCK_END_PORTAL_SPAWN, 1.0F, 1.0F));
+         for (Player p : world.getPlayers()) {
+            p.playSound(soundLoc, Sound.BLOCK_END_PORTAL_SPAWN, 1.0F, 1.0F);
+         }
+      } else {
+         Bukkit.broadcastMessage(
+            colorOnly + "\ud83e\uddea The " + itemName + "ritual at " + ChatColor.BOLD + ChatColor.AQUA + blockLoc.getBlockX() + ", " + blockLoc.getBlockY()
+               + ", " + blockLoc.getBlockZ() + ChatColor.RESET + colorOnly + " continues... " + dimensionLabel(world)
+         );
+      }
+
+      this.spawnCustomBeam(ritual);
+      this.saveRituals();
+      ritual.task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this.plugin, task -> {
+         ritual.elapsedTicks++;
+         double progress = Math.min(1.0, Math.max(0.0, (double)ritual.elapsedTicks / ritual.totalTicks));
+         bossBar.setProgress(progress);
+         if (progress >= 1.0) {
+            task.cancel();
+            this.finishRitual(ritual, itemName, soundLoc);
+         }
+      }, 1L, 1L);
+   }
+
+   private void finishRitual(ActiveRitual ritual, String itemName, Location soundLoc) {
+      ritual.bossBar.removeAll();
+      Bukkit.broadcastMessage(ChatColor.WHITE + ChatColor.stripColor(itemName) + " has been brewed!");
+      World world = ritual.location.getWorld();
+
+      for (Player p : world.getPlayers()) {
+         p.playSound(soundLoc, Sound.BLOCK_END_PORTAL_SPAWN, 1.0F, 1.0F);
+         p.playSound(soundLoc, Sound.BLOCK_BREWING_STAND_BREW, 1.0F, 1.2F);
+      }
+
+      // Load the chunk first so the reward isn't dropped into an unloaded chunk.
+      ritual.location.getChunk();
+      ItemStack reward = this.rewardFor(ritual.effect, ritual.augmented);
+      if (reward != null) {
+         Item dropped = world.dropItemNaturally(soundLoc, reward);
+         dropped.setInvulnerable(true);
+      }
+
+      removeBeam(ritual);
+      this.protectedBrewingStands.remove(ritual.location);
+      this.activeRituals.remove(ritual);
+      this.saveRituals();
+   }
+
+   private void saveRituals() {
+      YamlConfiguration out = new YamlConfiguration();
+      int i = 0;
+
+      for (ActiveRitual r : this.activeRituals) {
+         String path = "rituals." + i++;
+         out.set(path + ".effect", r.effect);
+         out.set(path + ".augmented", r.augmented);
+         out.set(path + ".world", r.location.getWorld().getName());
+         out.set(path + ".x", r.location.getBlockX());
+         out.set(path + ".y", r.location.getBlockY());
+         out.set(path + ".z", r.location.getBlockZ());
+         out.set(path + ".player", r.playerName);
+         out.set(path + ".total_ticks", r.totalTicks);
+         out.set(path + ".elapsed_ticks", r.elapsedTicks);
+      }
+
+      try {
+         out.save(this.ritualFile);
+      } catch (IOException var5) {
+         this.plugin.getLogger().warning("Could not save rituals.yml: " + var5.getMessage());
+      }
+   }
+
+   // A restart used to throw away running rituals: the ingredients and the augmented craft were already used up and
+   // the effect was never handed out. Rituals are saved on shutdown and continue where they stopped.
+   private void resumeSavedRituals() {
+      if (this.ritualFile.exists()) {
+         YamlConfiguration in = YamlConfiguration.loadConfiguration(this.ritualFile);
+         ConfigurationSection section = in.getConfigurationSection("rituals");
+         if (section != null) {
+            for (String id : section.getKeys(false)) {
+               ConfigurationSection r = section.getConfigurationSection(id);
+               World world = r == null ? null : Bukkit.getWorld(r.getString("world", ""));
+               if (world == null) {
+                  this.plugin.getLogger().warning("Saved ritual " + id + " is in a world that isn't loaded; skipped");
+               } else {
+                  Location loc = new Location(world, r.getInt("x"), r.getInt("y"), r.getInt("z"));
+                  ActiveRitual ritual = new ActiveRitual(
+                     r.getString("effect", ""),
+                     r.getBoolean("augmented"),
+                     loc,
+                     r.getString("player", "Someone"),
+                     Math.max(1, r.getInt("total_ticks", 1)),
+                     Math.max(0, r.getInt("elapsed_ticks", 0))
+                  );
+                  this.beginRitual(ritual, false);
+               }
+            }
+         }
+      }
+   }
+
+   /** Saves running rituals for the next startup and removes their beams. */
+   public void shutdown() {
+      this.saveRituals();
+
+      for (ActiveRitual r : new ArrayList<>(this.activeRituals)) {
+         if (r.task != null) {
+            r.task.cancel();
          }
 
-         this.spawnCustomBeam(brewingStandLocation);
-         int ritualDurationSeconds = this.plugin.getConfig().getInt("durations.ritual_duration", 600);
-         int totalTicks = ritualDurationSeconds * 20;
-         int[] ticksElapsed = new int[]{0};
-         Bukkit.getGlobalRegionScheduler()
-            .runAtFixedRate(
-               this.plugin,
-               task -> {
-                  ticksElapsed[0]++;
-                  double rawProgress = (double)ticksElapsed[0] / totalTicks;
-                  double clampedProgress = Math.min(1.0, Math.max(0.0, rawProgress));
-                  bossBar.setProgress(clampedProgress);
-                  if (clampedProgress >= 1.0) {
-                     bossBar.removeAll();
-                     Bukkit.broadcastMessage(ChatColor.WHITE + ChatColor.stripColor(itemName) + " has been brewed!");
+         if (r.bossBar != null) {
+            r.bossBar.removeAll();
+         }
 
-                     for (Player p : player.getWorld().getPlayers()) {
-                        Bukkit.getRegionScheduler()
-                           .execute(this.plugin, p.getLocation(), () -> p.playSound(playerLocation, Sound.BLOCK_END_PORTAL_SPAWN, 1.0F, 1.0F));
-                     }
+         removeBeam(r);
+      }
 
-                     Bukkit.getRegionScheduler().execute(this.plugin, brewingStandLocation, () -> {
-                        Item dropped = brewingStandLocation.getWorld().dropItemNaturally(brewingStandLocation, craftedItem);
-                        Material type = craftedItem.getType();
-                        if (type == Material.POTION || type == Material.SPLASH_POTION || type == Material.LINGERING_POTION) {
-                           dropped.setInvulnerable(true);
-                        }
-                     });
+      this.activeRituals.clear();
+      this.protectedBrewingStands.clear();
+   }
 
-                     for (Player p : player.getWorld().getPlayers()) {
-                        Bukkit.getRegionScheduler()
-                           .execute(this.plugin, p.getLocation(), () -> p.playSound(playerLocation, Sound.BLOCK_BREWING_STAND_BREW, 1.0F, 1.2F));
-                     }
-
-                     this.protectedBrewingStands.remove(brewingStandLocation.getBlock().getLocation());
-                     this.activeRituals.remove("Augmented");
-                     task.cancel();
-                  }
-               },
-               1L,
-               1L
-            );
+   @EventHandler
+   public void onJoinShowRituals(PlayerJoinEvent event) {
+      for (ActiveRitual r : this.activeRituals) {
+         if (r.bossBar != null) {
+            r.bossBar.addPlayer(event.getPlayer());
+         }
       }
    }
 
@@ -319,157 +467,152 @@ public class InfuseRecipeManager implements Listener {
       return BarColor.WHITE;
    }
 
+   private static boolean brewingStandNearby(Player player) {
+      Location loc = player.getLocation();
+      World world = loc.getWorld();
+
+      for (int x = -5; x <= 5; x++) {
+         for (int y = -5; y <= 5; y++) {
+            for (int z = -5; z <= 5; z++) {
+               if (world.getBlockAt(loc.getBlockX() + x, loc.getBlockY() + y, loc.getBlockZ() + z).getType() == Material.BREWING_STAND) {
+                  return true;
+               }
+            }
+         }
+      }
+
+      return false;
+   }
+
+   private static String effectLabel(String recipeKey) {
+      return recipeKey.isEmpty() ? recipeKey : Character.toUpperCase(recipeKey.charAt(0)) + recipeKey.substring(1);
+   }
+
+   /** Removes one of every ingredient, keeping the rest of each stack (and its data) as it was. */
+   private static void consumeIngredients(CraftingInventory inv) {
+      ItemStack[] matrix = inv.getMatrix();
+
+      for (int i = 0; i < matrix.length; i++) {
+         if (matrix[i] != null && matrix[i].getType() != Material.AIR) {
+            int newAmt = matrix[i].getAmount() - 1;
+            if (newAmt > 0) {
+               ItemStack rest = matrix[i].clone();
+               rest.setAmount(newAmt);
+               matrix[i] = rest;
+            } else {
+               matrix[i] = null;
+            }
+         }
+      }
+
+      inv.setMatrix(matrix);
+   }
+
    @EventHandler
    public void onCraft(CraftItemEvent event) {
-      if (event.getRecipe() instanceof ShapedRecipe) {
-         ShapedRecipe shaped = (ShapedRecipe)event.getRecipe();
-         String rawKey = shaped.getKey().getKey();
-         String recipeKey = this.fixKey(rawKey);
-         if (this.firstTimeRewards.containsKey(recipeKey)) {
+      if (event.getRecipe() instanceof ShapedRecipe shaped) {
+         String recipeKey = this.fixKey(shaped.getKey().getKey());
+         if (this.firstTimeRewards.containsKey(recipeKey) && event.getWhoClicked() instanceof Player player) {
             Inventory topInv = event.getView().getTopInventory();
             if (topInv.getType() != InventoryType.WORKBENCH) {
                event.setCancelled(true);
-               ((Player)event.getWhoClicked()).sendMessage(ChatColor.RED + "You must use a crafting table to craft this item!");
+               player.sendMessage(ChatColor.RED + "You must use a crafting table to craft this item!");
                return;
             }
 
-            if (event.isShiftClick()) {
+            // Only a plain click. Shift-click was already blocked, but Ctrl+Q on the result slot crafts again and again
+            // in one click while the craft limit was lowered only once.
+            if (event.getClick() != ClickType.LEFT && event.getClick() != ClickType.RIGHT) {
                event.setCancelled(true);
-               ((Player)event.getWhoClicked()).sendMessage(ChatColor.RED + "Don't shift click");
+               player.sendMessage(ChatColor.RED + "Take the effect out with a normal click.");
                return;
             }
 
-            Player player = (Player)event.getWhoClicked();
-            Location playerLocation = player.getLocation();
-            World world = playerLocation.getWorld();
-            boolean brewingStandNearby = false;
-            int x = -5;
+            if (!brewingStandNearby(player)) {
+               event.setCancelled(true);
+               return;
+            }
 
-            label127:
-            while (true) {
-               if (x <= 5 && !brewingStandNearby) {
-                  int y = -5;
+            if (!Settings.ritualAllowedIn(recipeKey, player.getWorld())) {
+               event.setCancelled(true);
+               player.sendMessage(
+                  ChatColor.RED + effectLabel(recipeKey) + " can only be made in: " + Settings.describeDimensions(Settings.ritualDimensions(recipeKey))
+               );
+               return;
+            }
 
-                  label122:
-                  while (true) {
-                     if (y <= 5 && !brewingStandNearby) {
-                        int z = -5;
+            String firstTimeKey = "first_time." + recipeKey;
+            String limitKey = "craft_limit." + recipeKey;
+            int limit = this.plugin.getConfig().getInt("effects." + recipeKey, 3);
+            int remaining = this.recipeLimits.getInt(limitKey, limit);
+            int maxAugments = this.plugin.getConfig().getInt("augments." + recipeKey, 1);
+            int usedAugments = this.recipeLimits.getInt(firstTimeKey, 0);
+            boolean augmented = maxAugments == -1 || usedAugments < maxAugments;
+            if (!augmented && limit != -1 && remaining <= 0) {
+               event.setCancelled(true);
+               player.sendMessage(ChatColor.RED + "You have reached the crafting limit for this item!");
+               return;
+            }
 
-                        while (true) {
-                           if (z <= 5) {
-                              Location check = playerLocation.clone().add(x, y, z);
-                              if (world.getBlockAt(check).getType() != Material.BREWING_STAND) {
-                                 z++;
-                                 continue;
-                              }
-
-                              brewingStandNearby = true;
-                           }
-
-                           y++;
-                           continue label122;
-                        }
-                     }
-
-                     x++;
-                     continue label127;
-                  }
+            boolean ritual = augmented || Settings.ritualSeconds(recipeKey, false) > 0;
+            if (!ritual) {
+               // Normal effect with no ritual time: crafted right away (the craft itself is done by the game).
+               if (limit != -1) {
+                  this.recipeLimits.set(limitKey, remaining - 1);
+                  this.saveRecipeLimits();
                }
 
-               if (!brewingStandNearby) {
-                  event.setCancelled(true);
-                  return;
-               }
+               ItemStack result = event.getRecipe().getResult();
+               String disp = result.hasItemMeta() && result.getItemMeta().hasDisplayName() ? result.getItemMeta().getDisplayName() : ChatColor.WHITE + "Effect";
+               String itemName = ChatColor.stripColor(disp).replace("Effect", "");
+               String color = ChatColor.getLastColors(disp);
+               Bukkit.broadcastMessage(
+                  color
+                     + "\ud83e\uddea "
+                     + itemName
+                     + " has been crafted at "
+                     + ChatColor.BOLD
+                     + ChatColor.AQUA
+                     + (int)player.getX()
+                     + ", "
+                     + (int)player.getY()
+                     + ", "
+                     + (int)player.getZ()
+                     + "... "
+                     + dimensionLabel(player.getWorld())
+               );
+               return;
+            }
 
-               String firstTimeKey = "first_time." + recipeKey;
-               String limitKey = "craft_limit." + recipeKey;
-               int limit = this.plugin.getConfig().getInt("effects." + recipeKey, 3);
-               int remaining = this.recipeLimits.getInt(limitKey, limit);
-               int maxAugments = this.plugin.getConfig().getInt("augments." + recipeKey, 1);
-               int usedAugments = this.recipeLimits.getInt(firstTimeKey, 0);
-               if (maxAugments != -1 && usedAugments >= maxAugments) {
-                  if (limit != -1 && remaining <= 0) {
-                     event.setCancelled(true);
-                     player.sendMessage(ChatColor.RED + "You have reached the crafting limit for this item!");
-                     return;
-                  }
+            event.setCancelled(true);
+            Block targetBlock = player.getTargetBlockExact(4);
+            if (targetBlock == null || targetBlock.getType() != Material.BREWING_STAND) {
+               player.sendMessage(ChatColor.RED + "You must use a brewing stand to start the ritual.");
+               return;
+            }
 
-                  if (limit != -1) {
-                     this.recipeLimits.set(limitKey, remaining - 1);
-                     this.saveRecipeLimits();
-                  }
-                  String var26 = switch (player.getWorld().getEnvironment()) {
-                     case NORMAL -> ChatColor.GREEN + "Overworld";
-                     case NETHER -> ChatColor.DARK_RED + "Nether";
-                     case THE_END -> ChatColor.DARK_PURPLE + "End";
-                     default -> ChatColor.GRAY + "Unknown Dimension";
-                  };
-                  ItemStack result = event.getRecipe().getResult();
-                  String disp = result.hasItemMeta() && result.getItemMeta().hasDisplayName()
-                     ? result.getItemMeta().getDisplayName()
-                     : ChatColor.WHITE + "Effect";
-                  String itemName = ChatColor.stripColor(disp).replace("Effect", "");
-                  String color = ChatColor.getLastColors(disp);
-                  Bukkit.broadcastMessage(
-                     color
-                        + "\ud83e\uddea "
-                        + itemName
-                        + " has been crafted at "
-                        + ChatColor.BOLD
-                        + ChatColor.AQUA
-                        + (int)player.getX()
-                        + ", "
-                        + (int)player.getY()
-                        + ", "
-                        + (int)player.getZ()
-                        + "... "
-                        + var26
-                  );
-                  return;
-               }
+            Location blockLoc = targetBlock.getLocation();
+            if (this.protectedBrewingStands.contains(blockLoc)) {
+               player.sendMessage(ChatColor.RED + "There is an ongoing ritual here.");
+               return;
+            }
 
-               CraftingInventory inv = event.getInventory();
-               ItemStack[] matrix = inv.getMatrix();
-               if (matrix == null) {
-                  event.setCancelled(true);
-                  return;
-               }
+            if (this.oneAtATime() && this.anyRitualRunning()) {
+               player.sendMessage(ChatColor.RED + "There is already an ongoing ritual.");
+               return;
+            }
 
-               Block targetBlock = player.getTargetBlockExact(4);
-               if (targetBlock == null || targetBlock.getType() != Material.BREWING_STAND) {
-                  player.sendMessage(ChatColor.RED + "You must use a brewing stand to start the ritual.");
-                  return;
-               }
-
-               Location blockLoc = targetBlock.getLocation();
-               if (this.protectedBrewingStands.contains(blockLoc)) {
-                  player.sendMessage(ChatColor.RED + "There is an ongoing ritual here.");
-                  event.setCancelled(true);
-                  return;
-               }
-
-               if (Boolean.TRUE.equals(this.activeRituals.get("Augmented"))) {
-                  player.sendMessage(ChatColor.RED + "There is already an ongoing ritual.");
-                  event.setCancelled(true);
-                  return;
-               }
-
-               for (int i = 0; i < matrix.length; i++) {
-                  if (matrix[i] != null && matrix[i].getType() != Material.AIR) {
-                     int newAmt = matrix[i].getAmount() - 1;
-                     matrix[i] = newAmt > 0 ? new ItemStack(matrix[i].getType(), newAmt) : null;
-                  }
-               }
-
-               inv.setMatrix(matrix);
-               player.updateInventory();
-               player.closeInventory();
+            consumeIngredients(event.getInventory());
+            player.updateInventory();
+            player.closeInventory();
+            if (augmented) {
                this.recipeLimits.set(firstTimeKey, usedAugments + 1);
-               this.saveRecipeLimits();
-               this.startRitual(player, recipeKey, blockLoc, this.firstTimeRewards.get(recipeKey));
-               event.setCancelled(true);
-               break;
+            } else if (limit != -1) {
+               this.recipeLimits.set(limitKey, remaining - 1);
             }
+
+            this.saveRecipeLimits();
+            this.startRitual(player, recipeKey, blockLoc, augmented);
          }
       }
    }
@@ -498,8 +641,7 @@ public class InfuseRecipeManager implements Listener {
    @EventHandler
    public void onPrepareCraft(PrepareItemCraftEvent event) {
       if (event.getRecipe() instanceof ShapedRecipe shaped) {
-         String rawKey = shaped.getKey().getKey();
-         String recipeKey = this.fixKey(rawKey);
+         String recipeKey = this.fixKey(shaped.getKey().getKey());
          if (this.firstTimeRewards.containsKey(recipeKey)) {
             if (event.getView().getTopInventory().getType() != InventoryType.WORKBENCH) {
                event.getInventory().setResult(null);
@@ -507,22 +649,13 @@ public class InfuseRecipeManager implements Listener {
             }
 
             Player player = (Player)event.getView().getPlayer();
-            Location loc = player.getLocation();
-            boolean hasNearbyStand = false;
-
-            for (int x = -5; x <= 5 && !hasNearbyStand; x++) {
-               for (int y = -5; y <= 5 && !hasNearbyStand; y++) {
-                  for (int z = -5; z <= 5; z++) {
-                     if (player.getWorld().getBlockAt(loc.clone().add(x, y, z)).getType() == Material.BREWING_STAND) {
-                        hasNearbyStand = true;
-                        break;
-                     }
-                  }
-               }
-            }
-
-            if (!hasNearbyStand) {
+            if (!brewingStandNearby(player)) {
                event.getInventory().setResult(null);
+            } else if (!Settings.ritualAllowedIn(recipeKey, player.getWorld())) {
+               event.getInventory().setResult(null);
+               player.sendActionBar(
+                  ChatColor.RED + effectLabel(recipeKey) + " can only be made in: " + Settings.describeDimensions(Settings.ritualDimensions(recipeKey))
+               );
             } else {
                int maxAug = this.plugin.getConfig().getInt("augments." + recipeKey, 1);
                int usedAug = this.recipeLimits.getInt("first_time." + recipeKey, 0);
@@ -540,11 +673,13 @@ public class InfuseRecipeManager implements Listener {
       }
    }
 
-   @EventHandler(
-      priority = EventPriority.HIGHEST
-   )
+   // ignoreCancelled: claim/protection plugins that block using someone else's brewing stand are respected now.
+   @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
    public void onBrewingStandInteract(PlayerInteractEvent event) {
-      if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.BREWING_STAND) {
+      if (event.getAction() == Action.RIGHT_CLICK_BLOCK
+         && event.getClickedBlock() != null
+         && event.getClickedBlock().getType() == Material.BREWING_STAND
+         && this.plugin.getConfig().getBoolean("rituals.brewing_stand_opens_crafting", true)) {
          event.setCancelled(true);
          Player player = event.getPlayer();
          Bukkit.getScheduler().runTask(this.plugin, () -> player.openWorkbench(null, true));
@@ -1138,22 +1273,30 @@ public class InfuseRecipeManager implements Listener {
 
    public boolean triggerRitualAt(Player player, String recipeKey, Location brewingStandLoc) {
       if (player != null && recipeKey != null && brewingStandLoc != null) {
-         recipeKey = this.fixKey(recipeKey.toLowerCase(Locale.ROOT));
-         ItemStack craftedItem = this.firstTimeRewards.get(recipeKey);
-         if (craftedItem == null) {
+         String key = recipeKey.toLowerCase(Locale.ROOT);
+         boolean augmented = true;
+         if (key.startsWith("augmented_")) {
+            key = key.substring("augmented_".length());
+         } else if (key.startsWith("augment_")) {
+            key = key.substring("augment_".length());
+         }
+
+         key = this.fixKey(key);
+         Location blockLoc = brewingStandLoc.getBlock().getLocation();
+         if (!this.firstTimeRewards.containsKey(key)) {
             player.sendMessage(ChatColor.RED + "Unknown ritual key: " + recipeKey);
             return false;
-         } else if (brewingStandLoc.getBlock().getType() != Material.BREWING_STAND) {
+         } else if (blockLoc.getBlock().getType() != Material.BREWING_STAND) {
             player.sendMessage(ChatColor.RED + "That location is not a brewing stand.");
             return false;
-         } else if (this.protectedBrewingStands.contains(brewingStandLoc)) {
+         } else if (this.protectedBrewingStands.contains(blockLoc)) {
             player.sendMessage(ChatColor.RED + "There is an ongoing ritual here.");
             return false;
-         } else if (Boolean.TRUE.equals(this.activeRituals.get("Augmented"))) {
+         } else if (this.oneAtATime() && this.anyRitualRunning()) {
             player.sendMessage(ChatColor.RED + "There is already an ongoing ritual.");
             return false;
          } else {
-            this.startRitual(player, recipeKey, brewingStandLoc, craftedItem);
+            this.startRitual(player, key, blockLoc, augmented);
             return true;
          }
       } else {
@@ -1172,9 +1315,6 @@ public class InfuseRecipeManager implements Listener {
          this.plugin.getLogger().severe("Failed to reload recipes: " + var2.getMessage());
          var2.printStackTrace();
       }
-   }
-
-   public void shutdown() {
    }
 
    public void debugRecipes() {
