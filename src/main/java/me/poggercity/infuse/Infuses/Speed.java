@@ -1,13 +1,11 @@
 package me.poggercity.infuse.Infuses;
 
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.Map.Entry;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -15,14 +13,13 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Particle.DustOptions;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffect;
@@ -30,51 +27,69 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 
 public class Speed implements Listener {
-   private static final String GEM_NAME = HexColorTranslator.translateToMinecraftColor("#d1a44b") + "Speed Effect";
-   private static final String SPEED = "speed";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
+   public static final String KEY = "speed";
+   private static final String STACKING = "speed_stacking";
    private final Plugin plugin;
-   private final Map<UUID, Integer> speedLevels = new HashMap<>();
+   // Extra speed levels earned by hitting (0 = base level only)
+   private final Map<UUID, Integer> stacks = new HashMap<>();
    private final Map<UUID, Long> lastHitTime = new HashMap<>();
-   private final Map<UUID, Long> bowPullStartTime = new HashMap<>();
-   private final Map<UUID, Integer> originalMaxNoDamageTicks = new HashMap<>();
-   private final Map<UUID, ScheduledTask> pendingRestores = new HashMap<>();
 
    public Speed(Plugin plugin) {
       this.plugin = plugin;
    }
 
-   public void applySpeedEffects() {
-      long currentTime = System.currentTimeMillis();
-      Bukkit.getOnlinePlayers().stream().filter(p -> this.hasSpeed(p, "1") || this.hasSpeed(p, "2")).forEach(p -> {
-         UUID uuid = p.getUniqueId();
-         this.speedLevels.putIfAbsent(uuid, 1);
-         if (currentTime - this.lastHitTime.getOrDefault(uuid, 0L) > 500L) {
-            this.speedLevels.put(uuid, 1);
-         }
-
-         int currentLevel = Math.max(0, this.speedLevels.get(uuid) - 1);
-         Location anchor = p.getLocation();
-         Bukkit.getRegionScheduler().run(Infuse.getInstance(), anchor, task -> {
-            if (p.isOnline() && !p.isDead()) {
-               p.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 10, currentLevel, false, false, false));
-            }
-         });
-      });
+   private static int baseLevel() {
+      return Math.max(0, Settings.intValue(KEY, STACKING, "base_level", 1));
    }
 
+   // Stacks used to grow forever (Speed 20+ after a few seconds of hitting). They are now capped at max_level.
+   private static int maxLevel() {
+      return Math.max(baseLevel(), Settings.intValue(KEY, STACKING, "max_level", 3));
+   }
+
+   public void applySpeedEffects() {
+      long now = System.currentTimeMillis();
+      boolean enabled = Settings.passive(KEY, STACKING);
+      long resetMs = Math.round(Settings.value(KEY, STACKING, "reset_seconds", 0.5) * 1000.0);
+      int baseLevel = baseLevel();
+      int maxLevel = maxLevel();
+
+      for (Player p : Bukkit.getOnlinePlayers()) {
+         UUID uuid = p.getUniqueId();
+         if (!enabled || !this.hasSpeed(p, "1") && !this.hasSpeed(p, "2")) {
+            this.stacks.remove(uuid);
+         } else {
+            if (now - this.lastHitTime.getOrDefault(uuid, 0L) > resetMs) {
+               this.stacks.put(uuid, 0);
+            }
+
+            int level = Math.min(maxLevel, baseLevel + this.stacks.getOrDefault(uuid, 0));
+            if (level > 0) {
+               int amplifier = level - 1;
+               Bukkit.getRegionScheduler().run(Infuse.getInstance(), p.getLocation(), task -> {
+                  if (p.isOnline() && !p.isDead()) {
+                     p.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 10, amplifier, false, false, false));
+                  }
+               });
+            }
+         }
+      }
+   }
+
+   // Taking damage resets the stacks.
    @EventHandler
    public void onPlayerDamage(EntityDamageEvent event) {
-      if (event.getEntity() instanceof Player) {
-         Player player = (Player)event.getEntity();
+      if (event.getEntity() instanceof Player player) {
          UUID uuid = player.getUniqueId();
-         this.speedLevels.put(uuid, 1);
+         this.stacks.put(uuid, 0);
          this.lastHitTime.put(uuid, System.currentTimeMillis());
       }
    }
 
-   // MONITOR so the cancelled check below sees the final outcome; this handler never modifies the event.
-   @EventHandler(priority = EventPriority.MONITOR)
+   // Each hit (at most one every 200 ms) adds a speed level, up to max_level.
+   // The old "enemy invincibility frames are halved" passive is removed: hits from Speed users no longer touch the
+   // target's invincibility frames at all.
+   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
    public void onEntityDamageByEntityEvent(EntityDamageByEntityEvent event) {
       if (event.getDamager() instanceof Player player && (this.hasSpeed(player, "1") || this.hasSpeed(player, "2"))) {
          UUID uuid = player.getUniqueId();
@@ -82,57 +97,16 @@ public class Speed implements Listener {
          long lastHit = this.lastHitTime.getOrDefault(uuid, 0L);
          if (currentTime - lastHit >= 200L) {
             this.lastHitTime.put(uuid, currentTime);
-            this.speedLevels.put(uuid, this.speedLevels.getOrDefault(uuid, 1) + 1);
-         }
-
-         // BUG FIX (spam-hit damage): this used to set the target's max no-damage ticks to 10 and never restore it,
-         // then reset its no-damage ticks to 0 one tick after the hit. That wiped the i-frames, so spam clicks landed
-         // as full hits, and the target kept halved i-frames against every attacker even after the Speed user left.
-         if (!event.isCancelled() && event.getEntity() instanceof LivingEntity target) {
-            this.halveInvulnerability(target);
+            int maxStacks = Math.max(0, maxLevel() - baseLevel());
+            this.stacks.put(uuid, Math.min(maxStacks, this.stacks.getOrDefault(uuid, 0) + 1));
          }
       }
    }
 
-   // "Enemy invincibility frames are halved". Vanilla only lets a full-damage hit through while
-   // noDamageTicks <= maxNoDamageTicks / 2, and a full hit sets noDamageTicks = maxNoDamageTicks right after this
-   // event. Halving the max here gives this hit a 5 tick window instead of 10 (default max 20). The real max is put
-   // back when that window ends, so the shorter window only applies to hits from Speed users.
-   // setNoDamageTicks is deliberately not used: on players it also sets spawn invulnerability.
-   private void halveInvulnerability(LivingEntity target) {
-      if (!(target.getNoDamageTicks() > target.getMaximumNoDamageTicks() / 2.0F)) {
-         UUID id = target.getUniqueId();
-         int original = this.originalMaxNoDamageTicks.computeIfAbsent(id, k -> target.getMaximumNoDamageTicks());
-         int halved = original / 2;
-         target.setMaximumNoDamageTicks(halved);
-         ScheduledTask previous = this.pendingRestores.remove(id);
-         if (previous != null) {
-            previous.cancel();
-         }
-
-         this.pendingRestores.put(id, Bukkit.getRegionScheduler().runDelayed(this.plugin, target.getLocation(), task -> {
-            this.pendingRestores.remove(id);
-            Integer max = this.originalMaxNoDamageTicks.remove(id);
-            if (max != null) {
-               target.setMaximumNoDamageTicks(max);
-            }
-         }, Math.max(1, halved / 2)));
-      }
-   }
-
-   // Scheduled restores do not run once the plugin is disabled (/reload), so restore every halved target now.
    @EventHandler
-   public void onPluginDisable(PluginDisableEvent event) {
-      if (event.getPlugin() == this.plugin) {
-         for (Entry<UUID, Integer> entry : this.originalMaxNoDamageTicks.entrySet()) {
-            if (Bukkit.getEntity(entry.getKey()) instanceof LivingEntity living) {
-               living.setMaximumNoDamageTicks(entry.getValue());
-            }
-         }
-
-         this.originalMaxNoDamageTicks.clear();
-         this.pendingRestores.clear();
-      }
+   public void onQuit(PlayerQuitEvent event) {
+      this.stacks.remove(event.getPlayer().getUniqueId());
+      this.lastHitTime.remove(event.getPlayer().getUniqueId());
    }
 
    private boolean hasSpeed(Player player, String tier) {
@@ -143,12 +117,13 @@ public class Speed implements Listener {
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "speed")) {
-         particles.spawnEffect(player, Color.fromRGB(209, 164, 75));
+         particles.spawnEffect(KEY, player, Color.fromRGB(209, 164, 75));
          Vector direction = player.getEyeLocation().getDirection().normalize();
          double dashStrength = Infuse.getInstance().getConfig().getDouble("damage.speed_dash_strength", 1.0);
          Vector dashVector = direction.clone().multiply(dashStrength);
          player.setVelocity(dashVector);
          DustOptions dustOptions = new DustOptions(Color.fromRGB(230, 220, 170), 1.5F);
+         int trailCount = Settings.particles(KEY, 5);
          int[] ticksPassed = new int[]{0};
          Location[] previousLocation = new Location[]{player.getLocation().clone()};
          Location anchor = player.getLocation();
@@ -157,20 +132,19 @@ public class Speed implements Listener {
                task.cancel();
             } else {
                Location currentLocation = player.getLocation();
-               double distance = previousLocation[0].distance(currentLocation);
-               if (distance > 0.1) {
+               double distance = previousLocation[0].getWorld() == currentLocation.getWorld() ? previousLocation[0].distance(currentLocation) : 0.0;
+               if (distance > 0.1 && trailCount > 0) {
                   Vector step = currentLocation.toVector().subtract(previousLocation[0].toVector()).normalize().multiply(0.3);
                   Location particleLocation = previousLocation[0].clone();
 
                   for (double d = 0.0; d <= distance; d += step.length()) {
                      particleLocation.add(step);
-                     player.getWorld().spawnParticle(Particle.DUST, particleLocation, 5, 0.1, 0.05, 0.1, 0.05, dustOptions);
+                     player.getWorld().spawnParticle(Particle.DUST, particleLocation, trailCount, 0.1, 0.05, 0.1, 0.05, dustOptions);
                   }
-
-                  previousLocation[0] = currentLocation.clone();
                }
 
-               if (ticksPassed[0] >= 3 && player.isOnGround()) {
+               previousLocation[0] = currentLocation.clone();
+               if (ticksPassed[0] >= 3 && player.isOnGround() || ticksPassed[0] >= 200) {
                   task.cancel();
                }
 

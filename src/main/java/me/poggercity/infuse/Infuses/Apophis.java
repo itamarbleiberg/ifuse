@@ -138,7 +138,7 @@ public class Apophis implements Listener {
    public void activateSpark(Player player) {
       UUID uuid = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(uuid, "apophis")) {
-         particles.spawnEffect(player, Color.fromRGB(48, 17, 69));
+         particles.spawnEffect("apophis", player, Color.fromRGB(48, 17, 69));
          player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
          int duration = Infuse.getInstance().getConfig().getInt("durations.apophis_spark", 20);
          Location anchor = player.getLocation();

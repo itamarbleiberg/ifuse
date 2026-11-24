@@ -99,7 +99,7 @@ public class Thunder implements Listener {
       UUID playerUUID = caster.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "thunder")) {
          int duration = Infuse.getInstance().getConfig().getInt("durations.thunder_spark", 10);
-         particles.spawnEffect(caster, Color.fromRGB(252, 237, 0));
+         particles.spawnEffect("thunder", caster, Color.fromRGB(252, 237, 0));
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
          this.activeSparks.add(playerUUID);
          CooldownManager.setDuration(playerUUID, "thunder", duration);

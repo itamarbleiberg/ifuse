@@ -1,5 +1,6 @@
 package me.poggercity.infuse.Infuses;
 
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -8,9 +9,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 public class particles {
-   public static void spawnEffect(Player player, Color color) {
+   /** Spark activation burst, scaled by effect_settings.&lt;effect&gt;.particles.ability_percent. */
+   public static void spawnEffect(String effect, Player player, Color color) {
       Location base = player.getLocation().add(0.0, 0.0, 0.0);
-      int count = 30;
+      int count = Settings.particles(effect, 30);
       double spread = 0.5;
 
       for (int i = 0; i < count; i++) {
@@ -22,16 +24,22 @@ public class particles {
       }
    }
 
-   public static void spawnEffect2(Player player, Color color) {
-      player.getWorld().spawnParticle(Particle.ENTITY_EFFECT, player.getLocation().add(0.0, 1.0, 0.0), 2, 0.0, 0.5, 0.0, 0.1, color);
+   /** Passive aura for a normal effect. */
+   public static void spawnEffect2(Player player, Color color, int amount) {
+      if (amount > 0) {
+         player.getWorld().spawnParticle(Particle.ENTITY_EFFECT, player.getLocation().add(0.0, 1.0, 0.0), amount, 0.0, 0.5, 0.0, 0.1, color);
+      }
    }
 
-   public static void spawnAugmented(Player player, Color color) {
-      DustOptions dust = new DustOptions(color, 1.5F);
-      player.getWorld().spawnParticle(Particle.DUST, player.getLocation().add(0.0, 1.0, 0.0), 2, 0.3, 0.5, 0.3, 0.1, dust);
+   /** Passive aura for an augmented effect. */
+   public static void spawnAugmented(Player player, Color color, int amount) {
+      if (amount > 0) {
+         DustOptions dust = new DustOptions(color, 1.5F);
+         player.getWorld().spawnParticle(Particle.DUST, player.getLocation().add(0.0, 1.0, 0.0), amount, 0.3, 0.5, 0.3, 0.1, dust);
+      }
    }
 
-   public static void spawnHearts(Player player) {
+   public static void spawnHearts(String effect, Player player) {
       Location location = player.getLocation().add(0.0, 1.0, 0.0);
       Vector direction = player.getLocation().getDirection();
       double primarySpread = 0.5;
@@ -46,7 +54,7 @@ public class particles {
          offsetZ = primarySpread;
       }
 
-      int count = 5;
+      int count = Settings.particles(effect, 5);
 
       for (int i = 0; i < count; i++) {
          double randomX = (Math.random() * 2.0 - 1.0) * offsetX;

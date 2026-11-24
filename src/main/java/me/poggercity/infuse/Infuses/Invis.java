@@ -151,7 +151,7 @@ public class Invis implements Listener {
    public void activateSpark(Player caster) {
       UUID playerUUID = caster.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "invis")) {
-         particles.spawnEffect(caster, Color.fromRGB(126, 0, 252));
+         particles.spawnEffect("invis", caster, Color.fromRGB(126, 0, 252));
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.3F, 2.0F);
          World world = caster.getWorld();
          world.playSound(caster.getLocation(), Sound.ENTITY_WITHER_SHOOT, 0.5F, 1.0F);

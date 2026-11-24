@@ -11,24 +11,31 @@ configs:
   default_offhand_for_ability: false
   cant_unequip_while_on_cooldown: false
   only_allow_one_primary: false
-  haste_enchant: true
-  emerald_enchant: true
   drop_effects_on_death: 1
   random_effect_on_join: false
   random_secondary_effect_on_join: false
   random_primary_effect_on_join: false
   roll_enable_ender: true
   roll_enable_apophis: true
-  chain_lightning: true
   action_bar_update_time: 1
   event_update_time: 1
   apophis_enabled: true
-  fire_lava_fly: true
-  apophis_lava_fly: true
 
+  # Effects do nothing in these worlds
   disabled_worlds:
     - lobby
 
+# ---------------------------------------------------------------------------------------------------------
+# Rituals. Effects are crafted in a crafting table near a brewing stand (right-click a brewing stand).
+# Each effect's own ritual settings (dimensions and ritual time) are under effect_settings.<effect>.ritual.
+# ---------------------------------------------------------------------------------------------------------
+rituals:
+  # Only one ritual can run on the whole server at a time
+  one_at_a_time: true
+  # Right-clicking a brewing stand opens a crafting table instead of the brewing menu
+  brewing_stand_opens_crafting: true
+
+# How many augmented effects can be made per effect (the first crafts of each effect are augmented)
 augments:
   emerald: 1
   feather: 1
@@ -45,6 +52,7 @@ augments:
   ender: 0
   apophis: 1
 
+# How many normal effects can be crafted per effect after the augmented ones (-1 = unlimited)
 effects:
   emerald: 3
   feather: 3
@@ -64,21 +72,13 @@ effects:
 damage:
   thunder: 4
   feather_spark: 8
-  ocean_drown: 4
-  increasing_fire_damage_multiplier: 1.3
-  max_fire_damage_multiplier: 3.0
   fire_launch_strength: 4.0
-  trident_pull_strength: 1.5
   speed_dash_strength: 1
-  feather_mace: 1.5
   dragon: 4
   apophis_wither_duration: 15
   apophis_area_duration: 20
-  thunder_hearts: 1.0
 
 durations:
-  dragon_curse_duration: 7
-  ritual_duration: 600
   fire_spark: 4
   frost_spark: 10
   heart_spark: 60
@@ -105,19 +105,146 @@ cooldowns:
   feather_spark: 40
   speed_spark: 20
   ender_spark: 10
-  ender_dragon_breath: 30
   apophis_spark: 90
 
 radius:
   fire: 5.0
   invis: 10.0
   ocean: 15.0
-  ocean_drown: 5.0
   thunder: 7.0
   feather: 4.0
   frost: 5.0
-  ender: 50.0
   apophis: 5.0
+
+# ---------------------------------------------------------------------------------------------------------
+# Per-effect settings. You can also change these in-game with /infuseconfig (permission infuse.config).
+#   particles.aura_enabled / aura_amount : particles around players who have the effect (shown about once a second)
+#   particles.ability_percent            : % of the normal particle amount used by the spark ability (0 = none)
+#   passives.<name>.enabled               : turn a passive on or off, the other numbers tune it (chances are in %)
+#   ritual.dimensions                     : where the effect can be crafted: overworld, nether, end
+#   ritual.normal_seconds                 : ritual time for the normal effect (0 = crafted instantly)
+#   ritual.augmented_seconds              : ritual time for the augmented effect
+# Spark (ability) cooldowns, durations, radius and damage are in the sections above.
+# ---------------------------------------------------------------------------------------------------------
+effect_settings:
+  emerald:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      consumable_refund: {enabled: true, chance: 25, spark_chance: 50}
+      throwable_refund: {enabled: true, chance: 25, spark_chance: 50}
+      enchanting_table: {enabled: true}
+      exp_boost: {enabled: true, multiplier: 1.5, spark_multiplier: 3.0}
+      looting: {enabled: true, level: 5}
+      luck: {enabled: true, level: 10}
+      hero_of_the_village: {enabled: true, level: 3}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  feather:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      no_fall_damage: {enabled: true}
+      fall_attack: {enabled: true, min_fall: 7, multiplier: 1.5}
+      wind_charge_counter: {enabled: true, hits: 10}
+      wind_charge_cooldown: {enabled: true, ticks: 5}
+      wind_charge_boost: {enabled: true, velocity: 2.0}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  fire:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      fire_resistance: {enabled: true}
+      lava_flight: {enabled: true}
+      evaporate_water: {enabled: true, radius: 3, spark_radius: 7}
+      auto_smelt: {enabled: true}
+      ignite_on_hit: {enabled: true, hits: 10, seconds: 3}
+      fire_damage_boost: {enabled: true, step: 1.3, max: 3.0}
+      lava_bucket_clutch: {enabled: true, seconds: 2}
+      flame_arrows: {enabled: true}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  frost:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      ice_speed: {enabled: true, level: 3}
+      freeze_on_hit: {enabled: true, hits: 10, seconds: 10}
+      freeze_mobs: {enabled: true, seconds: 10}
+      frozen_wind_charge_cooldown: {enabled: true, seconds: 3}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  haste:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      haste_effect: {enabled: true, level: 2}
+      tool_enchants: {enabled: true, efficiency: 10, fortune: 5, unbreaking: 5}
+      vein_miner: {enabled: true, max_blocks: 64}
+      shield_cooldown: {enabled: true, seconds: 2.5}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  heart:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      extra_hearts: {enabled: true, hearts: 5}
+      food_absorption: {enabled: true, level: 1, seconds: 30}
+      golden_apple_absorption: {enabled: true, level: 5, seconds: 120}
+      health_display: {enabled: true, hits: 10}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  invis:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      invisibility: {enabled: true}
+      blind_on_hit: {enabled: true, hits: 10, seconds: 4}
+      mob_invisibility: {enabled: true}
+      arrow_blind: {enabled: true, seconds: 4}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  ocean:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      conduit_power: {enabled: true}
+      water_bonus: {enabled: true, extra_hearts: 2, speed_level: 1}
+      swim_faster: {enabled: true}
+      drowning_aura: {enabled: true, radius: 5.0, damage: 4}
+      trident_pull: {enabled: true, strength: 1.5}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  regen:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      regen_on_hit: {enabled: true, level: 2, seconds: 2}
+      extra_saturation: {enabled: true, amount: 6}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  speed:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      speed_stacking: {enabled: true, base_level: 1, max_level: 3, reset_seconds: 0.5}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  strength:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      mob_damage: {enabled: true, multiplier: 2.0}
+      shield_disable: {enabled: true, seconds: 10}
+      piercing_arrows: {enabled: true}
+      low_health_damage: {enabled: true}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  thunder:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      smite_on_hit: {enabled: true, hits: 10, rain_hits: 5, hearts: 1.0}
+      chain_lightning: {enabled: true}
+      trident_smite: {enabled: true}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  ender:
+    particles: {aura_enabled: true, aura_amount: 2, ability_percent: 100}
+    passives:
+      glowing: {enabled: true, radius: 50.0}
+      dragon_fireball: {enabled: true, cooldown_seconds: 30}
+      curse: {enabled: true, seconds: 7}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
+  apophis:
+    particles: {aura_enabled: false, aura_amount: 2, ability_percent: 100}
+    passives:
+      regeneration: {enabled: true}
+      water_breathing: {enabled: true}
+      fire_resistance: {enabled: true}
+      lava_flight: {enabled: true}
+      luck: {enabled: true}
+      haste: {enabled: true}
+      wither_on_hit: {enabled: true, hits: 10, seconds: 5}
+      spark_tool_bonus: {enabled: true}
+    ritual: {dimensions: [overworld, nether, end], normal_seconds: 0, augmented_seconds: 600}
 
 recipes:
   emerald:

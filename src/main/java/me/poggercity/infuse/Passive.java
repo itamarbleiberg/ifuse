@@ -2,16 +2,15 @@ package me.poggercity.infuse;
 
 import me.poggercity.infuse.Infuses.particles;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffectType;
 
+/** Aura particles around players with effects (every 19 ticks). Amount per effect: effect_settings.&lt;effect&gt;.particles. */
 public class Passive {
-   private final PlayerHackManager hackManager = new PlayerHackManager();
-
    public void startTask() {
       Bukkit.getGlobalRegionScheduler().runAtFixedRate(Infuse.getInstance(), task -> {
          for (Player player : Bukkit.getOnlinePlayers()) {
@@ -28,43 +27,52 @@ public class Passive {
             hack = hack.toLowerCase();
             boolean isAugmented = hack.contains("augmented");
             if (hack.contains("strength")) {
-               this.spawn(player, Color.fromRGB(139, 0, 0), isAugmented);
+               this.spawn("strength", player, Color.fromRGB(139, 0, 0), isAugmented);
             } else if (hack.contains("thunder")) {
-               this.spawn(player, Color.fromRGB(252, 237, 0), isAugmented);
+               this.spawn("thunder", player, Color.fromRGB(252, 237, 0), isAugmented);
             } else if (hack.contains("emerald")) {
-               this.spawn(player, Color.GREEN, isAugmented);
+               this.spawn("emerald", player, Color.GREEN, isAugmented);
             } else if (hack.contains("feather")) {
-               this.spawn(player, Color.fromRGB(190, 163, 202), isAugmented);
+               this.spawn("feather", player, Color.fromRGB(190, 163, 202), isAugmented);
             } else if (hack.contains("fire")) {
-               this.spawn(player, Color.fromRGB(252, 120, 3), isAugmented);
+               this.spawn("fire", player, Color.fromRGB(252, 120, 3), isAugmented);
             } else if (hack.contains("frost")) {
-               this.spawn(player, Color.fromRGB(0, 255, 255), isAugmented);
+               this.spawn("frost", player, Color.fromRGB(0, 255, 255), isAugmented);
             } else if (hack.contains("haste")) {
-               this.spawn(player, Color.fromRGB(185, 108, 0), isAugmented);
+               this.spawn("haste", player, Color.fromRGB(185, 108, 0), isAugmented);
             } else if (hack.contains("heart")) {
-               this.spawn(player, Color.fromRGB(252, 0, 70), isAugmented);
+               this.spawn("heart", player, Color.fromRGB(252, 0, 70), isAugmented);
             } else if (hack.contains("ocean")) {
-               this.spawn(player, Color.fromRGB(0, 90, 252), isAugmented);
+               this.spawn("ocean", player, Color.fromRGB(0, 90, 252), isAugmented);
             } else if (hack.contains("regen")) {
-               this.spawn(player, Color.fromRGB(255, 3, 239), isAugmented);
+               this.spawn("regen", player, Color.fromRGB(255, 3, 239), isAugmented);
             } else if (hack.contains("speed")) {
-               this.spawn(player, Color.fromRGB(209, 164, 75), isAugmented);
+               this.spawn("speed", player, Color.fromRGB(209, 164, 75), isAugmented);
             } else if (hack.contains("ender")) {
-               spawnDragon(player);
+               if (Settings.auraEnabled("ender")) {
+                  spawnDragon(player, Settings.auraAmount("ender") * 16);
+               }
+            } else if (hack.contains("apophis")) {
+               this.spawn("apophis", player, Color.fromRGB(48, 17, 69), isAugmented);
             }
          }
       }
    }
 
-   public static void spawnDragon(Player player) {
-      player.getWorld().spawnParticle(Particle.REVERSE_PORTAL, player.getLocation().add(0.0, 1.0, 0.0), 32, 0.3, 0.5, 0.3, 0.0);
+   public static void spawnDragon(Player player, int amount) {
+      if (amount > 0) {
+         player.getWorld().spawnParticle(Particle.REVERSE_PORTAL, player.getLocation().add(0.0, 1.0, 0.0), amount, 0.3, 0.5, 0.3, 0.0);
+      }
    }
 
-   private void spawn(Player player, Color color, boolean isAugmented) {
-      if (isAugmented) {
-         particles.spawnAugmented(player, color);
-      } else {
-         particles.spawnEffect2(player, color);
+   private void spawn(String effect, Player player, Color color, boolean isAugmented) {
+      if (Settings.auraEnabled(effect)) {
+         int amount = Settings.auraAmount(effect);
+         if (isAugmented) {
+            particles.spawnAugmented(player, color, amount);
+         } else {
+            particles.spawnEffect2(player, color, amount);
+         }
       }
    }
 }

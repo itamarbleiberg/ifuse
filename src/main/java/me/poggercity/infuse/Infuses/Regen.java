@@ -66,7 +66,7 @@ public class Regen implements Listener {
       if (!CooldownManager.isOnCooldown(playerUUID, "regen")) {
          int duration = Infuse.getInstance().getConfig().getInt("durations.regen_spark", 30);
          int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.regen_spark", 60);
-         particles.spawnEffect(player, Color.fromRGB(255, 3, 239));
+         particles.spawnEffect("regen", player, Color.fromRGB(255, 3, 239));
          player.playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_PREPARE_MIRROR, 1.0F, 1.0F);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented regen")

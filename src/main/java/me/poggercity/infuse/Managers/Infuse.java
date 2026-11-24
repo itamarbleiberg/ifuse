@@ -72,6 +72,9 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    private Strength strength;
    private Speed speed;
    private Ender dragon;
+   private Feather feather;
+   private Regen regen;
+   private Thunder thunder;
    private Apophis apophis;
    private Passive passive;
    private Ritual ritual;
@@ -101,8 +104,9 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       }
 
       this.trustManager = new TrustManager();
-      this.abilitiesHandler = new Abilities(this);
       this.hackManager2 = new PlayerHackManager();
+      this.createEffects();
+      this.abilitiesHandler = new Abilities(this);
 
       try {
          this.registerCommands();
@@ -144,9 +148,77 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
          }
       }
 
+      changed |= this.migrateToEffectSettings(cfg);
+      if (!cfg.isSet(Settings.ROOT)) {
+         // Older config.yml without the per-effect section: write the defaults so they can be edited in the file.
+         changed = true;
+      }
+
       if (changed) {
          this.saveConfig();
       }
+   }
+
+   // Legacy keys from Infuse 2.4 that now live under effect_settings.<effect>. A value the admin set in the old place
+   // is copied to the new place (unless the new place is already set) and the old key is removed.
+   private static final String[][] LEGACY_KEYS = new String[][]{
+      {"configs.haste_enchant", "haste.passives.tool_enchants.enabled", "apophis.passives.haste.enabled"},
+      {"configs.emerald_enchant", "emerald.passives.looting.enabled", "emerald.passives.luck.enabled",
+         "emerald.passives.hero_of_the_village.enabled", "apophis.passives.spark_tool_bonus.enabled"},
+      {"configs.chain_lightning", "thunder.passives.chain_lightning.enabled"},
+      {"configs.fire_lava_fly", "fire.passives.lava_flight.enabled"},
+      {"configs.apophis_lava_fly", "apophis.passives.lava_flight.enabled"},
+      {"damage.feather_mace", "feather.passives.fall_attack.multiplier"},
+      {"damage.increasing_fire_damage_multiplier", "fire.passives.fire_damage_boost.step"},
+      {"damage.max_fire_damage_multiplier", "fire.passives.fire_damage_boost.max"},
+      {"damage.ocean_drown", "ocean.passives.drowning_aura.damage"},
+      {"radius.ocean_drown", "ocean.passives.drowning_aura.radius"},
+      {"damage.trident_pull_strength", "ocean.passives.trident_pull.strength"},
+      {"damage.thunder_hearts", "thunder.passives.smite_on_hit.hearts"},
+      {"radius.ender", "ender.passives.glowing.radius"},
+      {"cooldowns.ender_dragon_breath", "ender.passives.dragon_fireball.cooldown_seconds"},
+      {"durations.dragon_curse_duration", "ender.passives.curse.seconds"}
+   };
+   public static final String[] EFFECT_KEYS = new String[]{
+      "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis"
+   };
+
+   private boolean migrateToEffectSettings(FileConfiguration cfg) {
+      boolean changed = false;
+
+      for (String[] mapping : LEGACY_KEYS) {
+         if (cfg.isSet(mapping[0])) {
+            Object value = cfg.get(mapping[0]);
+
+            for (int i = 1; i < mapping.length; i++) {
+               String target = Settings.ROOT + "." + mapping[i];
+               if (!cfg.isSet(target)) {
+                  cfg.set(target, value);
+               }
+            }
+
+            cfg.set(mapping[0], null);
+            changed = true;
+            this.getLogger().info("[config] moved '" + mapping[0] + "' to effect_settings");
+         }
+      }
+
+      if (cfg.isSet("durations.ritual_duration")) {
+         int seconds = cfg.getInt("durations.ritual_duration");
+
+         for (String effect : EFFECT_KEYS) {
+            String target = Settings.ROOT + "." + effect + ".ritual.augmented_seconds";
+            if (!cfg.isSet(target)) {
+               cfg.set(target, seconds);
+            }
+         }
+
+         cfg.set("durations.ritual_duration", null);
+         changed = true;
+         this.getLogger().info("[config] moved 'durations.ritual_duration' to effect_settings.<effect>.ritual.augmented_seconds");
+      }
+
+      return changed;
    }
 
    @EventHandler
@@ -516,7 +588,9 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       return this.hackManager2;
    }
 
-   private void registerEvents() {
+   // One instance per effect. Abilities and Apophis used to create their own copies, so state kept by the copies
+   // (for example Ender's cursed players) was invisible to the registered listeners.
+   private void createEffects() {
       this.fire = new Fire(this);
       this.frost = new Frost(this);
       this.eme = new Emerald(this);
@@ -527,8 +601,75 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       this.strength = new Strength();
       this.speed = new Speed(this);
       this.dragon = new Ender();
-      if (this.getConfig().getBoolean("configs.apophis_enabled", true)) {
-         this.apophis = new Apophis(this);
+      this.feather = new Feather(this);
+      this.regen = new Regen(this);
+      this.thunder = new Thunder(this);
+      this.apophis = new Apophis(this);
+   }
+
+   public Fire getFire() {
+      return this.fire;
+   }
+
+   public Frost getFrost() {
+      return this.frost;
+   }
+
+   public Emerald getEmerald() {
+      return this.eme;
+   }
+
+   public Haste getHaste() {
+      return this.haste;
+   }
+
+   public Invis getInvis() {
+      return this.invis;
+   }
+
+   public Heart getHeart() {
+      return this.heart;
+   }
+
+   public Ocean getOcean() {
+      return this.ocean;
+   }
+
+   public Strength getStrength() {
+      return this.strength;
+   }
+
+   public Speed getSpeed() {
+      return this.speed;
+   }
+
+   public Ender getEnder() {
+      return this.dragon;
+   }
+
+   public Feather getFeather() {
+      return this.feather;
+   }
+
+   public Regen getRegen() {
+      return this.regen;
+   }
+
+   public Thunder getThunder() {
+      return this.thunder;
+   }
+
+   public Apophis getApophis() {
+      return this.apophis;
+   }
+
+   public boolean isApophisEnabled() {
+      return this.getConfig().getBoolean("configs.apophis_enabled", true);
+   }
+
+   private void registerEvents() {
+      boolean apophisEnabled = this.isApophisEnabled();
+      if (apophisEnabled) {
          Bukkit.getPluginManager().registerEvents(this.apophis, this);
       }
 
@@ -543,10 +684,10 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       Bukkit.getPluginManager().registerEvents(this.eme, this);
       Bukkit.getPluginManager().registerEvents(new HackEquipListener(), this);
       Bukkit.getPluginManager().registerEvents(this.ocean, this);
-      Bukkit.getPluginManager().registerEvents(new Regen(this), this);
-      Bukkit.getPluginManager().registerEvents(new Feather(this), this);
-      Bukkit.getPluginManager().registerEvents(new Ender(), this);
-      Bukkit.getPluginManager().registerEvents(new Thunder(this), this);
+      Bukkit.getPluginManager().registerEvents(this.regen, this);
+      Bukkit.getPluginManager().registerEvents(this.feather, this);
+      Bukkit.getPluginManager().registerEvents(this.dragon, this);
+      Bukkit.getPluginManager().registerEvents(this.thunder, this);
       Bukkit.getPluginManager().registerEvents(this.haste, this);
       Bukkit.getPluginManager().registerEvents(this.speed, this);
       Bukkit.getPluginManager().registerEvents(this.fire, this);
@@ -586,7 +727,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
             this.dragon.startTrackingTask();
          }
 
-         if (this.apophis != null) {
+         if (this.apophis != null && apophisEnabled) {
             this.apophis.applyApophisEffects();
          }
       }, 1L, startdelay);

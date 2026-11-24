@@ -49,20 +49,20 @@ public class Abilities implements CommandExecutor, Listener {
 
    public Abilities(Infuse plugin) {
       this.plugin = plugin;
-      this.emeraldAbility = new Emerald(plugin);
-      this.featherAbility = new Feather(plugin);
-      this.fireAbility = new Fire(plugin);
-      this.frostAbility = new Frost(plugin);
-      this.hasteAbility = new Haste();
-      this.heartAbility = new Heart();
-      this.InvisAbility = new Invis(plugin);
-      this.oceanAbility = new Ocean(plugin);
-      this.regenAbility = new Regen(plugin);
-      this.speedAbility = new Speed(plugin);
-      this.strengthAbility = new Strength();
-      this.thunderAbility = new Thunder(plugin);
-      this.dragon = new Ender();
-      this.apophisAbility = new Apophis(plugin);
+      this.emeraldAbility = plugin.getEmerald();
+      this.featherAbility = plugin.getFeather();
+      this.fireAbility = plugin.getFire();
+      this.frostAbility = plugin.getFrost();
+      this.hasteAbility = plugin.getHaste();
+      this.heartAbility = plugin.getHeart();
+      this.InvisAbility = plugin.getInvis();
+      this.oceanAbility = plugin.getOcean();
+      this.regenAbility = plugin.getRegen();
+      this.speedAbility = plugin.getSpeed();
+      this.strengthAbility = plugin.getStrength();
+      this.thunderAbility = plugin.getThunder();
+      this.dragon = plugin.getEnder();
+      this.apophisAbility = plugin.getApophis();
    }
 
    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -157,7 +157,7 @@ public class Abilities implements CommandExecutor, Listener {
                break;
             case "Fire Effect":
             case "Augmented Fire Effect":
-               if (CooldownManager.isOnCooldown(player.getUniqueId(), "fire")) {
+               if (CooldownManager.isOnCooldown(player.getUniqueId(), "fire_spark")) {
                   return;
                }
 
@@ -196,7 +196,7 @@ public class Abilities implements CommandExecutor, Listener {
                break;
             case "Heart Effect":
             case "Augmented Heart Effect":
-               if (CooldownManager.isOnCooldown(player.getUniqueId(), "heart")) {
+               if (CooldownManager.isOnCooldown(player.getUniqueId(), "health")) {
                   return;
                }
 
@@ -286,7 +286,7 @@ public class Abilities implements CommandExecutor, Listener {
                }
                break;
             case "Ender Effect":
-               if (CooldownManager.isOnCooldown(player.getUniqueId(), "dragon")) {
+               if (CooldownManager.isOnCooldown(player.getUniqueId(), "ender")) {
                   return;
                }
 

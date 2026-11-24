@@ -167,8 +167,8 @@ public class Heart implements Listener {
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "health")) {
-         particles.spawnEffect(player, Color.fromRGB(252, 0, 70));
-         particles.spawnHearts(player);
+         particles.spawnEffect("heart", player, Color.fromRGB(252, 0, 70));
+         particles.spawnHearts("heart", player);
          AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
          if (maxHealthAttribute != null) {
             maxHealthAttribute.setBaseValue(40.0);

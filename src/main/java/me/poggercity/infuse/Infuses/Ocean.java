@@ -279,7 +279,7 @@ public class Ocean implements Listener {
    public void activateSpark(Player caster) {
       UUID playerUUID = caster.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "ocean")) {
-         particles.spawnEffect(caster, Color.fromRGB(0, 90, 252));
+         particles.spawnEffect("ocean", caster, Color.fromRGB(0, 90, 252));
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
          double wallRadius = this.radius;
          int duration = Infuse.getInstance().getConfig().getInt("durations.ocean_spark", 5);
