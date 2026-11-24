@@ -185,6 +185,35 @@ public class InfuseRecipeManager implements Listener {
       }
    }
 
+   // The beam entities aren't saved with the chunk, so they vanish when the chunk unloads (everyone walked away from a
+   // long ritual, or the ritual was resumed after a restart). They are put back once the chunk is loaded again, and
+   // follow configs.brewing_beam if it is changed while a ritual runs.
+   private void refreshBeam(ActiveRitual ritual) {
+      if (!this.plugin.getConfig().getBoolean("configs.brewing_beam", true)) {
+         removeBeam(ritual);
+         return;
+      }
+
+      World world = ritual.location.getWorld();
+      int cx = ritual.location.getBlockX() >> 4;
+      int cz = ritual.location.getBlockZ() >> 4;
+      if (world.isChunkLoaded(cx, cz) && world.getChunkAt(cx, cz).isEntitiesLoaded()) {
+         boolean intact = !ritual.beam.isEmpty();
+
+         for (Entity e : ritual.beam) {
+            if (!e.isValid()) {
+               intact = false;
+               break;
+            }
+         }
+
+         if (!intact) {
+            removeBeam(ritual);
+            this.spawnCustomBeam(ritual);
+         }
+      }
+   }
+
    private static void removeBeam(ActiveRitual ritual) {
       for (Entity e : ritual.beam) {
          if (e.isValid()) {
@@ -265,16 +294,24 @@ public class InfuseRecipeManager implements Listener {
             p.playSound(soundLoc, Sound.BLOCK_END_PORTAL_SPAWN, 1.0F, 1.0F);
          }
       } else {
-         Bukkit.broadcastMessage(
-            colorOnly + "\ud83e\uddea The " + itemName + "ritual at " + ChatColor.BOLD + ChatColor.AQUA + blockLoc.getBlockX() + ", " + blockLoc.getBlockY()
-               + ", " + blockLoc.getBlockZ() + ChatColor.RESET + colorOnly + " continues... " + dimensionLabel(world)
-         );
+         String msg = colorOnly + "\ud83e\uddea The " + itemName + "ritual at " + ChatColor.BOLD + ChatColor.AQUA + blockLoc.getBlockX() + ", "
+            + blockLoc.getBlockY() + ", " + blockLoc.getBlockZ() + ChatColor.RESET + colorOnly + " continues... " + dimensionLabel(world);
+         // Resumed during startup: nobody is online yet and broadcasts don't reach the console that early, so it's logged.
+         this.plugin.getLogger().info(ChatColor.stripColor(msg));
+
+         for (Player p : Bukkit.getOnlinePlayers()) {
+            p.sendMessage(msg);
+         }
       }
 
-      this.spawnCustomBeam(ritual);
+      this.refreshBeam(ritual);
       this.saveRituals();
       ritual.task = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this.plugin, task -> {
          ritual.elapsedTicks++;
+         if (ritual.elapsedTicks % 20 == 0) {
+            this.refreshBeam(ritual);
+         }
+
          double progress = Math.min(1.0, Math.max(0.0, (double)ritual.elapsedTicks / ritual.totalTicks));
          bossBar.setProgress(progress);
          if (progress >= 1.0) {
