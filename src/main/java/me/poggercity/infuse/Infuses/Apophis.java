@@ -9,7 +9,8 @@ import java.util.Set;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -30,9 +31,9 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 public class Apophis implements Listener {
+   public static final String KEY = "apophis";
    private static final String GEM_NAME = HexColorTranslator.translateToMinecraftColor("#301145") + "Apophis Effect";
    private static final String APOPHIS_KEY = "apophis";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Plugin plugin;
    private final Set<UUID> lavaFlyers = new HashSet<>();
    private final Map<UUID, Integer> apophisHitCount = new HashMap<>();
@@ -94,20 +95,37 @@ public class Apophis implements Listener {
                   Infuse.getInstance(),
                   anchor,
                   task -> {
-                     player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 40, 0, false, false, false));
-                     player.addPotionEffects(
-                        Arrays.asList(
-                           new PotionEffect(PotionEffectType.CONDUIT_POWER, 40, 0, false, false, false),
-                           new PotionEffect(PotionEffectType.DOLPHINS_GRACE, 40, 0, false, false, false)
-                        )
-                     );
-                     player.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 40, 0, false, false, false));
-                     player.addPotionEffect(new PotionEffect(PotionEffectType.LUCK, 40, 0, false, false, false));
-                     if (Infuse.getInstance().getConfig().getBoolean("configs.haste_enchant", true)) {
+                     if (Settings.passive(KEY, "regeneration")) {
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 40, 0, false, false, false));
+                     }
+
+                     if (Settings.passive(KEY, "water_breathing")) {
+                        player.addPotionEffects(
+                           Arrays.asList(
+                              new PotionEffect(PotionEffectType.CONDUIT_POWER, 40, 0, false, false, false),
+                              new PotionEffect(PotionEffectType.DOLPHINS_GRACE, 40, 0, false, false, false)
+                           )
+                        );
+                     }
+
+                     if (Settings.passive(KEY, "fire_resistance")) {
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 40, 0, false, false, false));
+                     }
+
+                     if (Settings.passive(KEY, "luck")) {
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.LUCK, 40, 0, false, false, false));
+                     }
+
+                     if (Settings.passive(KEY, "haste")) {
                         player.addPotionEffect(new PotionEffect(PotionEffectType.HASTE, 40, 1, false, false, false));
                      }
 
-                     this.handleLavaFlight(player);
+                     // configs.apophis_lava_fly existed but was never checked; it is now the lava_flight passive.
+                     if (Settings.passive(KEY, "lava_flight")) {
+                        this.handleLavaFlight(player);
+                     } else {
+                        this.disableLavaFlightIfNeeded(player);
+                     }
                   }
                );
          }
@@ -127,6 +145,12 @@ public class Apophis implements Listener {
       }
    }
 
+   @EventHandler
+   public void onQuit(PlayerQuitEvent event) {
+      this.disableLavaFlightIfNeeded(event.getPlayer());
+      this.apophisHitCount.remove(event.getPlayer().getUniqueId());
+   }
+
    private void disableLavaFlightIfNeeded(Player player) {
       UUID id = player.getUniqueId();
       if (this.lavaFlyers.remove(id)) {
@@ -141,36 +165,17 @@ public class Apophis implements Listener {
          particles.spawnEffect("apophis", player, Color.fromRGB(48, 17, 69));
          player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
          int duration = Infuse.getInstance().getConfig().getInt("durations.apophis_spark", 20);
-         Location anchor = player.getLocation();
-         Bukkit.getRegionScheduler().run(Infuse.getInstance(), anchor, task -> {
-            double base = player.getAttribute(Attribute.MAX_HEALTH).getBaseValue();
-            if (base < 40.0) {
-               double next = Math.min(base + 20.0, 40.0);
-               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(next);
-               player.setHealth(Math.min(player.getHealth() + 20.0, player.getAttribute(Attribute.MAX_HEALTH).getValue()));
-            }
-         });
+         // 20 hearts for the spark's duration: Heart.tickMaxHealth gives them while the "apophis" duration is active
+         // and takes them away afterwards. The tool/weapon enchantments are given by ToolBonuses for the same time;
+         // they used to be written onto the held item, stayed there if the player switched items, and enchantments
+         // the item already had were deleted when the spark ended.
+         CooldownManager.setDuration(uuid, "apophis", duration);
+         Infuse.getInstance().getHeart().updateMaxHealth(player);
+         player.setHealth(Math.min(player.getHealth() + 20.0, player.getAttribute(Attribute.MAX_HEALTH).getValue()));
          CooldownManager.setDuration(uuid, "st", duration);
-         if (Infuse.getInstance().getConfig().getBoolean("configs.emerald_enchant", true)) {
-            ItemStack main = player.getInventory().getItemInMainHand();
-            if (main != null && main.getType() != Material.AIR) {
-               String t = main.getType().toString();
-               if (t.contains("PICKAXE") || t.contains("SHOVEL") || t.contains("AXE")) {
-                  main.addUnsafeEnchantment(Enchantment.EFFICIENCY, 10);
-                  main.addUnsafeEnchantment(Enchantment.FORTUNE, 5);
-               }
+         double radius = Infuse.getInstance().getConfig().getDouble("radius.apophis", 5.0);
 
-               if (t.contains("SWORD") || t.contains("AXE")) {
-                  main.addUnsafeEnchantment(Enchantment.SHARPNESS, 5);
-                  main.addUnsafeEnchantment(Enchantment.LOOTING, 5);
-               }
-            }
-         }
-
-         boolean aoeTicks = true;
-         double radius = 5.0;
-
-         for (Entity e : player.getNearbyEntities(5.0, 5.0, 5.0)) {
+         for (Entity e : player.getNearbyEntities(radius, radius, radius)) {
             if (e.getWorld() != null
                && e.getWorld().equals(player.getWorld())
                && e instanceof Player target
@@ -184,39 +189,11 @@ public class Apophis implements Listener {
          }
 
          CooldownManager.setCooldown(uuid, "fire_spark", 0L);
-         new Fire(Infuse.getInstance()).activateSpark(player);
-         CooldownManager.setDuration(uuid, "apophis", duration);
+         Infuse.getInstance().getFire().activateSpark(player);
          int baseCd = Infuse.getInstance().getConfig().getInt("cooldowns.apophis_spark", 90);
          boolean augmented = this.isAugmentedApophis(player);
          int finalCd = augmented ? baseCd / 2 + duration : baseCd + duration;
          CooldownManager.setCooldown(uuid, "apophis", finalCd);
-         Bukkit.getRegionScheduler().runDelayed(Infuse.getInstance(), anchor, task -> {
-            if (player.isOnline()) {
-               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(20.0);
-               if (player.getHealth() > 20.0) {
-                  player.setHealth(20.0);
-               }
-
-               ItemStack main = player.getInventory().getItemInMainHand();
-               if (main != null && main.getType() != Material.AIR) {
-                  if (main.getEnchantmentLevel(Enchantment.EFFICIENCY) > 5) {
-                     main.removeEnchantment(Enchantment.EFFICIENCY);
-                  }
-
-                  if (main.getEnchantmentLevel(Enchantment.FORTUNE) > 3) {
-                     main.removeEnchantment(Enchantment.FORTUNE);
-                  }
-
-                  if (main.getEnchantmentLevel(Enchantment.SHARPNESS) > 5) {
-                     main.removeEnchantment(Enchantment.SHARPNESS);
-                  }
-
-                  if (main.getEnchantmentLevel(Enchantment.LOOTING) > 3) {
-                     main.removeEnchantment(Enchantment.LOOTING);
-                  }
-               }
-            }
-         }, duration * 20L);
       }
    }
 
@@ -225,14 +202,16 @@ public class Apophis implements Listener {
       if (event.getDamager() instanceof Player attacker
          && event.getEntity() instanceof Player target
          && this.hasApophisEquipped(attacker)
+         && Settings.passive(KEY, "wither_on_hit")
          && !Infuse.getInstance().getTrustManager().isTrusted(attacker, target)) {
          UUID attackerId = attacker.getUniqueId();
          int hits = this.apophisHitCount.getOrDefault(attackerId, 0) + 1;
-         if (hits >= 10) {
+         int witherTicks = Math.max(1, Settings.intValue(KEY, "wither_on_hit", "seconds", 5)) * 20;
+         if (hits >= Math.max(1, Settings.intValue(KEY, "wither_on_hit", "hits", 10))) {
             this.apophisHitCount.put(attackerId, 0);
             Location tAnchor = target.getLocation();
             Bukkit.getRegionScheduler().run(this.plugin, tAnchor, task -> {
-               target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, 100, 0, false, false));
+               target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, witherTicks, 0, false, false));
                target.getWorld().playSound(target.getLocation(), Sound.ENTITY_WITHER_AMBIENT, 1.0F, 1.0F);
             });
          } else {

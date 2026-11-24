@@ -9,7 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -26,6 +26,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
@@ -42,15 +43,14 @@ import org.bukkit.util.Vector;
 public class Fire implements Listener {
    private static final String GEM_NAME = ChatColor.GOLD + "Fire Effect";
    private static final String SPARK_COOLDOWN_KEY = "fire_spark";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Map<UUID, Integer> hitCounter = new HashMap<>();
    private final Set<UUID> lavaSwimmers = new HashSet<>();
    private final Map<UUID, Double> damageMultipliers = new HashMap<>();
    private final Map<UUID, ScheduledTask> decayTasks = new HashMap<>();
    private final Map<UUID, Long> lavaClutchTimes = new HashMap<>();
-   int duration = sparkDuration();
-   double radius = sparkRadius();
+   public static final String KEY = "fire";
 
+   // Read on every use so config changes apply without a restart (these were fixed when the plugin started).
    private static int sparkDuration() {
       return Infuse.getInstance().getConfig().getInt("durations.fire_spark", 4);
    }
@@ -60,7 +60,7 @@ public class Fire implements Listener {
    }
 
    private static boolean lavaFlyEnabled() {
-      return Infuse.getInstance().getConfig().getBoolean("configs.fire_lava_fly", true);
+      return Settings.passive(KEY, "lava_flight");
    }
 
    public Fire(Infuse plugin) {
@@ -88,7 +88,9 @@ public class Fire implements Listener {
    @EventHandler
    public void onPlayerBucketEmpty(PlayerBucketEmptyEvent event) {
       Player player = event.getPlayer();
-      if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && event.getBucket() == Material.LAVA_BUCKET) {
+      if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))
+         && event.getBucket() == Material.LAVA_BUCKET
+         && Settings.passive(KEY, "lava_bucket_clutch")) {
          this.lavaClutchTimes.put(player.getUniqueId(), System.currentTimeMillis());
       }
    }
@@ -97,10 +99,14 @@ public class Fire implements Listener {
    public void onPlayerFireDamage(EntityDamageEvent event) {
       if (event.getEntity() instanceof Player victim && (event.getCause() == DamageCause.FIRE || event.getCause() == DamageCause.FIRE_TICK)) {
          Player fireCauser = this.getFireCauser(victim);
-         if (fireCauser != null && (this.hasImmortalHackEquipped(fireCauser, "1") || this.hasImmortalHackEquipped(fireCauser, "2"))) {
-            double increaseFactor = Infuse.getInstance().getConfig().getDouble("damage.increasing_fire_damage_multiplier", 1.3);
+         // Trusted players (teammates) near a Fire user no longer take the extra fire damage.
+         if (fireCauser != null
+            && Settings.passive(KEY, "fire_damage_boost")
+            && (this.hasImmortalHackEquipped(fireCauser, "1") || this.hasImmortalHackEquipped(fireCauser, "2"))
+            && !Infuse.getInstance().getTrustManager().isTrusted(fireCauser, victim)) {
+            double increaseFactor = Math.max(1.0, Settings.value(KEY, "fire_damage_boost", "step", 1.3));
             double currentMultiplier = this.damageMultipliers.getOrDefault(victim.getUniqueId(), 1.0);
-            double maxMultiplier = Infuse.getInstance().getConfig().getDouble("damage.max_fire_damage_multiplier", 2.0);
+            double maxMultiplier = Math.max(1.0, Settings.value(KEY, "fire_damage_boost", "max", 3.0));
             double newMultiplier = Math.min(currentMultiplier * increaseFactor, maxMultiplier);
             this.damageMultipliers.put(victim.getUniqueId(), newMultiplier);
             event.setDamage(event.getDamage() * newMultiplier);
@@ -118,7 +124,7 @@ public class Fire implements Listener {
 
       this.decayTasks.put(victimId, Bukkit.getRegionScheduler().runAtFixedRate(Infuse.getInstance(), victim.getLocation(), task -> {
          double currentMultiplier = this.damageMultipliers.getOrDefault(victimId, 1.0);
-         double decreaseFactor = Infuse.getInstance().getConfig().getDouble("damage.increasing_fire_damage_multiplier", 1.3);
+         double decreaseFactor = Math.max(1.01, Settings.value(KEY, "fire_damage_boost", "step", 1.3));
          currentMultiplier /= decreaseFactor;
          if (currentMultiplier <= 1.0) {
             this.damageMultipliers.remove(victimId);
@@ -135,7 +141,7 @@ public class Fire implements Listener {
       double nearestDistance = 1.7976931348623157E308;
 
       for (Entity entity : victim.getNearbyEntities(10.0, 10.0, 10.0)) {
-         if (entity instanceof Player p) {
+         if (entity instanceof Player p && p.getWorld().equals(victim.getWorld())) {
             double distance = victim.getLocation().distance(p.getLocation());
             if (!(distance > 10.0) && (this.hasImmortalHackEquipped(p, "1") || this.hasImmortalHackEquipped(p, "2")) && distance < nearestDistance) {
                nearest = p;
@@ -172,7 +178,11 @@ public class Fire implements Listener {
                      .execute(
                         Infuse.getInstance(),
                         player.getLocation(),
-                        () -> player.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 40, 0, true, false))
+                        () -> {
+                           if (Settings.passive(KEY, "fire_resistance")) {
+                              player.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, 40, 0, true, false));
+                           }
+                        }
                      );
                   this.handleLavaSwim(player, lavaFlyEnabled());
                   this.handleWater2(player);
@@ -181,16 +191,20 @@ public class Fire implements Listener {
       }
    }
 
-   @EventHandler
+   @EventHandler(priority = EventPriority.HIGH)
    public void onBlockBreak(BlockBreakEvent event) {
       Player player = event.getPlayer();
-      if (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) {
+      if (!event.isCancelled()
+         && event.isDropItems()
+         && Settings.passive(KEY, "auto_smelt")
+         && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))) {
          ItemStack item = player.getInventory().getItemInMainHand();
          if (item.getType().name().endsWith("_PICKAXE") && !item.containsEnchantment(Enchantment.SILK_TOUCH)) {
             Material blockType = event.getBlock().getType();
             ItemStack drop = null;
             int amount = 1;
-            int fortuneLevel = item.getEnchantmentLevel(Enchantment.FORTUNE);
+            // Includes Haste's Fortune bonus (that used to be written onto the pickaxe).
+            int fortuneLevel = Infuse.getInstance().getToolBonuses().effectiveLevel(player, item, Enchantment.FORTUNE);
             if (fortuneLevel > 0) {
                amount += ThreadLocalRandom.current().nextInt(1, fortuneLevel + 2);
             }
@@ -215,7 +229,11 @@ public class Fire implements Listener {
                   return;
             }
 
-            event.getBlock().getWorld().spawnParticle(Particle.FLAME, event.getBlock().getLocation().add(0.5, 0.5, 0.5), 10, 0.2, 0.2, 0.2, 0.01);
+            int flames = Settings.particles(KEY, 10);
+            if (flames > 0) {
+               event.getBlock().getWorld().spawnParticle(Particle.FLAME, event.getBlock().getLocation().add(0.5, 0.5, 0.5), flames, 0.2, 0.2, 0.2, 0.01);
+            }
+
             event.setDropItems(false);
             player.getWorld().dropItemNaturally(event.getBlock().getLocation(), drop);
          }
@@ -244,14 +262,13 @@ public class Fire implements Listener {
    }
 
    private void handleWater2(Player player) {
-      if (player.getFireTicks() > 0) {
-         int radius = 3;
-         if (player.hasPotionEffect(PotionEffectType.UNLUCK)) {
-            PotionEffect effect = player.getPotionEffect(PotionEffectType.UNLUCK);
-            if (effect != null && effect.getAmplifier() == 7) {
-               radius = 7;
-            }
+      if (player.getFireTicks() > 0 && Settings.passive(KEY, "evaporate_water")) {
+         int radius = Math.max(0, Settings.intValue(KEY, "evaporate_water", "radius", 3));
+         if (CooldownManager.isEffectActive(player.getUniqueId(), SPARK_COOLDOWN_KEY)) {
+            radius = Math.max(radius, Settings.intValue(KEY, "evaporate_water", "spark_radius", 7));
          }
+
+         radius = Math.min(radius, 10);
 
          this.evaporateWaterAt(player, player.getLocation(), radius);
       }
@@ -329,6 +346,7 @@ public class Fire implements Listener {
    @EventHandler
    public void onEntityShootBow(EntityShootBowEvent event) {
       if (event.getEntity() instanceof Player player
+         && Settings.passive(KEY, "flame_arrows")
          && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))
          && event.getForce() >= 1.0F
          && event.getProjectile() instanceof Projectile projectile) {
@@ -340,6 +358,7 @@ public class Fire implements Listener {
    public void onEntityDamage(EntityDamageEvent event) {
       if (event.getEntity() instanceof Player player
          && event.getCause() == DamageCause.FALL
+         && Settings.passive(KEY, "lava_bucket_clutch")
          && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))) {
          Material blockType = player.getLocation().getBlock().getType();
          if (blockType == Material.LAVA || blockType == Material.LAVA_CAULDRON) {
@@ -350,10 +369,15 @@ public class Fire implements Listener {
          Long lastClutchTime = this.lavaClutchTimes.get(player.getUniqueId());
          if (lastClutchTime != null) {
             long timeDiff = System.currentTimeMillis() - lastClutchTime;
-            if (timeDiff <= 2000L) {
+            long window = Math.round(Math.max(0.0, Settings.value(KEY, "lava_bucket_clutch", "seconds", 2.0)) * 1000.0);
+            if (timeDiff <= window) {
                event.setCancelled(true);
                player.sendMessage(ChatColor.GOLD + "Lava bucket clutch saved you from fall damage!");
-               player.getWorld().spawnParticle(Particle.LAVA, player.getLocation(), 20, 0.5, 0.5, 0.5, 0.1);
+               int lava = Settings.particles(KEY, 20);
+               if (lava > 0) {
+                  player.getWorld().spawnParticle(Particle.LAVA, player.getLocation(), lava, 0.5, 0.5, 0.5, 0.1);
+               }
+
                player.playSound(player.getLocation(), Sound.BLOCK_LAVA_POP, 1.0F, 1.0F);
                this.lavaClutchTimes.remove(player.getUniqueId());
             }
@@ -361,13 +385,21 @@ public class Fire implements Listener {
       }
    }
 
-   @EventHandler
+   // Sets the target on fire every few hits. Trusted players are skipped like in the other effects' hit passives.
+   @EventHandler(ignoreCancelled = true)
    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player player && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))) {
+      if (event.getDamager() instanceof Player player
+         && Settings.passive(KEY, "ignite_on_hit")
+         && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))) {
+         if (event.getEntity() instanceof Player target && Infuse.getInstance().getTrustManager().isTrusted(player, target)) {
+            return;
+         }
+
          UUID uuid = player.getUniqueId();
+         int hits = Math.max(1, Settings.intValue(KEY, "ignite_on_hit", "hits", 10));
          int count = this.hitCounter.getOrDefault(uuid, 0) + 1;
-         if (count >= 10) {
-            event.getEntity().setFireTicks(60);
+         if (count >= hits) {
+            event.getEntity().setFireTicks(Math.max(1, Settings.intValue(KEY, "ignite_on_hit", "seconds", 3)) * 20);
             count = 0;
          }
 
@@ -375,29 +407,35 @@ public class Fire implements Listener {
       }
    }
 
+   private static void lavaRing(World world, Location center, double radius) {
+      for (int angle = 0; angle < 360; angle += 2) {
+         int count = Settings.particles(KEY, 2) > 0 ? Settings.particlesAt(KEY) * 2 : 0;
+         if (count > 0) {
+            double rad = Math.toRadians(angle);
+            Location particleLoc = center.clone().add(radius * Math.cos(rad), 0.0, radius * Math.sin(rad));
+            world.spawnParticle(Particle.LAVA, particleLoc, count, 0.0, 0.5, 0.0, 0.0);
+         }
+      }
+   }
+
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "fire_spark")) {
-         Location anchor = player.getLocation();
-         Bukkit.getRegionScheduler()
-            .run(Infuse.getInstance(), anchor, task -> player.addPotionEffect(new PotionEffect(PotionEffectType.UNLUCK, 100, 7, false, false)));
-         player.getWorld().spawnParticle(Particle.FLAME, player.getLocation().add(0.0, 1.0, 0.0), 30, 0.5, 0.5, 0.5, 0.1);
+         int duration = sparkDuration();
+         double radius = sparkRadius();
+         int flames = Settings.particles(KEY, 30);
+         if (flames > 0) {
+            player.getWorld().spawnParticle(Particle.FLAME, player.getLocation().add(0.0, 1.0, 0.0), flames, 0.5, 0.5, 0.5, 0.1);
+         }
+
          player.playSound(player.getLocation(), Sound.ENTITY_BLAZE_SHOOT, 1.0F, 1.0F);
          Location center = player.getLocation();
          World world = center.getWorld();
          this.evaporateWaterAt(player, center, 5);
-
-         for (int baseCooldown = 0; baseCooldown < 360; baseCooldown += 2) {
-            double rad = Math.toRadians(baseCooldown);
-            double offsetX = this.radius * Math.cos(rad);
-            double offsetZ = this.radius * Math.sin(rad);
-            Location particleLoc = center.clone().add(offsetX, 0.0, offsetZ);
-            world.spawnParticle(Particle.LAVA, particleLoc, 2, 0.0, 0.5, 0.0, 0.0);
-         }
-
+         lavaRing(world, center, radius);
          world.playSound(player.getLocation(), Sound.ENTITY_BLAZE_DEATH, 0.5F, 1.0F);
 
-         for (Entity entity : player.getNearbyEntities(this.radius, 5.0, this.radius)) {
+         for (Entity entity : player.getNearbyEntities(radius, 5.0, radius)) {
             if (entity instanceof LivingEntity target
                && !target.equals(player)
                && !(target instanceof Player targetPlayer && Infuse.getInstance().getTrustManager().isTrusted(player, targetPlayer))) {
@@ -405,20 +443,22 @@ public class Fire implements Listener {
             }
          }
 
-         this.spawnSparkEffect(player);
-         CooldownManager.setDuration(playerUUID, "fire_spark", this.duration + 1);
+         // The spark's duration also marks the bigger water-evaporation radius (this used to be a hidden Bad Luck
+         // effect, which clashed with Feather's own Bad Luck marker).
+         CooldownManager.setDuration(playerUUID, "fire_spark", duration + 1);
+         this.spawnSparkEffect(player, duration, radius);
          int var141 = Infuse.getInstance().getConfig().getInt("cooldowns.fire_spark", 60);
          boolean isAug = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented fire")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "2")).toLowerCase().contains("augmented fire");
-         int cooldown = (isAug ? var141 / 2 : var141) + this.duration;
+         int cooldown = (isAug ? var141 / 2 : var141) + duration;
          this.handleWater2(player);
          CooldownManager.setCooldown(playerUUID, "fire_spark", cooldown);
       }
    }
 
-   private void spawnSparkEffect(Player caster) {
+   private void spawnSparkEffect(Player caster, int duration, double radius) {
       int[] tick = new int[]{0};
       Location anchor = caster.getLocation();
       Bukkit.getRegionScheduler()
@@ -426,9 +466,11 @@ public class Fire implements Listener {
             Infuse.getInstance(),
             anchor,
             task -> {
-               if (tick[0] >= this.duration * 20) {
+               if (!caster.isOnline()) {
                   task.cancel();
-                  this.startDarkRedDustEffect(caster.getLocation(), caster);
+               } else if (tick[0] >= duration * 20) {
+                  task.cancel();
+                  this.startDarkRedDustEffect(caster.getLocation(), caster, radius);
                } else {
                   Location center = caster.getLocation();
                   World world = center.getWorld();
@@ -439,7 +481,7 @@ public class Fire implements Listener {
                   if (tick[0] > 0 && tick[0] % 20 == 0) {
                      world.playSound(center, Sound.ENTITY_BLAZE_SHOOT, 1.0F, 1.0F);
 
-                     for (Entity entity : caster.getNearbyEntities(this.radius, 5.0, this.radius)) {
+                     for (Entity entity : caster.getNearbyEntities(radius, 5.0, radius)) {
                         if (entity instanceof LivingEntity target
                            && !target.equals(caster)
                            && !(target instanceof Player p && Infuse.getInstance().getTrustManager().isTrusted(caster, p))) {
@@ -447,15 +489,12 @@ public class Fire implements Listener {
                         }
                      }
 
-                     world.spawnParticle(Particle.TRIAL_SPAWNER_DETECTION, center, 25, 0.2, 0.0, 0.2, 0.0);
-
-                     for (int angle = 0; angle < 360; angle += 2) {
-                        double rad = Math.toRadians(angle);
-                        double offsetX = this.radius * Math.cos(rad);
-                        double offsetZ = this.radius * Math.sin(rad);
-                        Location particleLoc = center.clone().add(offsetX, 0.0, offsetZ);
-                        world.spawnParticle(Particle.LAVA, particleLoc, 2, 0.0, 0.5, 0.0, 0.0);
+                     int detection = Settings.particles(KEY, 25);
+                     if (detection > 0) {
+                        world.spawnParticle(Particle.TRIAL_SPAWNER_DETECTION, center, detection, 0.2, 0.0, 0.2, 0.0);
                      }
+
+                     lavaRing(world, center, radius);
                   }
 
                   tick[0]++;
@@ -466,30 +505,28 @@ public class Fire implements Listener {
          );
    }
 
-   private void startDarkRedDustEffect(Location startLoc, Player caster) {
+   private void startDarkRedDustEffect(Location startLoc, Player caster, double radius) {
       World world = startLoc.getWorld();
-      double explosionRadius = this.radius;
       double launch = Infuse.getInstance().getConfig().getDouble("damage.fire_launch_strength", 4.0);
 
       for (Player target : world.getPlayers()) {
          if (!target.equals(caster)
             && !Infuse.getInstance().getTrustManager().isTrusted(caster, target)
-            && target.getLocation().distance(startLoc) <= explosionRadius) {
+            && target.getLocation().distance(startLoc) <= radius) {
             target.setVelocity(new Vector(0.0, launch, 0.0));
          }
       }
 
       world.playSound(startLoc, Sound.ENTITY_GENERIC_EXPLODE, 2.0F, 1.0F);
       world.playSound(startLoc, Sound.ENTITY_BLAZE_DEATH, 0.5F, 1.0F);
-      double fixedRadius = this.radius;
       double fixedHeight = startLoc.getY();
-
-      for (int angle = 0; angle < 360; angle++) {
-         double rad = Math.toRadians(angle);
-         double offsetX = fixedRadius * Math.cos(rad);
-         double offsetZ = fixedRadius * Math.sin(rad);
-         Location particleLoc = new Location(world, startLoc.getX() + offsetX, fixedHeight, startLoc.getZ() + offsetZ);
-         world.spawnParticle(Particle.DUST_PILLAR, particleLoc, 20, 0.0, 0.0, 0.0, launch / 4.0, Material.LAVA.createBlockData());
+      int pillar = Settings.particles(KEY, 20);
+      if (pillar > 0) {
+         for (int angle = 0; angle < 360; angle++) {
+            double rad = Math.toRadians(angle);
+            Location particleLoc = new Location(world, startLoc.getX() + radius * Math.cos(rad), fixedHeight, startLoc.getZ() + radius * Math.sin(rad));
+            world.spawnParticle(Particle.DUST_PILLAR, particleLoc, pillar, 0.0, 0.0, 0.0, launch / 4.0, Material.LAVA.createBlockData());
+         }
       }
    }
 
