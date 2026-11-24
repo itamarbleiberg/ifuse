@@ -7,7 +7,8 @@ import java.util.Set;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -36,18 +37,23 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 
 public class Invis implements Listener {
+   public static final String KEY = "invis";
    private static final String GEM_NAME = ChatColor.DARK_PURPLE + "Invis Effect";
    private static final String IMMORTAL_KEY = "invis";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Plugin plugin;
    private final Map<UUID, Integer> meleeHitCounter = new HashMap<>();
-   double radius = Infuse.getInstance().getConfig().getDouble("radius.invis", 10.0);
+   // Players currently hidden by an Invis spark. Only these can be hit by swinging at them while invisible.
+   private final Set<UUID> vanished = new HashSet<>();
 
    public Invis(Plugin plugin) {
       this.plugin = plugin;
    }
 
    public void applyInvisEffects() {
+      if (!Settings.passive(KEY, "invisibility")) {
+         return;
+      }
+
       for (Player player : Bukkit.getOnlinePlayers()) {
          if (this.hasImmortalHackEquipped(player)) {
             Location loc = player.getLocation();
@@ -72,6 +78,19 @@ public class Invis implements Listener {
       }
    }
 
+   // Players who join during a smoke screen can't see the hidden players either.
+   @EventHandler
+   public void onJoin(PlayerJoinEvent event) {
+      Player joined = event.getPlayer();
+
+      for (UUID id : this.vanished) {
+         Player hidden = Bukkit.getPlayer(id);
+         if (hidden != null && !hidden.equals(joined) && !Infuse.getInstance().getTrustManager().isTrusted(hidden, joined)) {
+            joined.hidePlayer(this.plugin, hidden);
+         }
+      }
+   }
+
    public static boolean isStealthGem(ItemStack item) {
       return item != null
          && item.getType() == Material.POTION
@@ -90,6 +109,7 @@ public class Invis implements Listener {
    @EventHandler
    public void onProjectileHit(ProjectileHitEvent event) {
       if (event.getEntity().getShooter() instanceof Player shooterPlayer
+         && Settings.passive(KEY, "arrow_blind")
          && this.hasImmortalHackEquipped(shooterPlayer)
          && event.getEntity() instanceof Arrow
          && event.getHitEntity() instanceof LivingEntity target) {
@@ -97,10 +117,11 @@ public class Invis implements Listener {
             return;
          }
 
+         int ticks = Math.max(1, Settings.intValue(KEY, "arrow_blind", "seconds", 4)) * 20;
          Location loc = target.getLocation();
          Bukkit.getRegionScheduler().run(this.plugin, loc, task -> {
-            target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 80, 0, false, false));
-            target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, 80, 0, false, false));
+            target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, ticks, 0, false, false));
+            target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, ticks, 0, false, false));
          });
          this.spawnBlackParticles(target, 3);
       }
@@ -108,18 +129,22 @@ public class Invis implements Listener {
 
    @EventHandler
    public void onMeleeHit(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player attacker && event.getEntity() instanceof LivingEntity target && this.hasImmortalHackEquipped(attacker)) {
+      if (event.getDamager() instanceof Player attacker
+         && event.getEntity() instanceof LivingEntity target
+         && Settings.passive(KEY, "blind_on_hit")
+         && this.hasImmortalHackEquipped(attacker)) {
          if (target instanceof Player playerTarget && Infuse.getInstance().getTrustManager().isTrusted(attacker, playerTarget)) {
             return;
          }
 
          int count = this.meleeHitCounter.getOrDefault(attacker.getUniqueId(), 0) + 1;
          this.meleeHitCounter.put(attacker.getUniqueId(), count);
-         if (count >= 10) {
+         if (count >= Math.max(1, Settings.intValue(KEY, "blind_on_hit", "hits", 10))) {
+            int ticks = Math.max(1, Settings.intValue(KEY, "blind_on_hit", "seconds", 4)) * 20;
             Location loc = target.getLocation();
             Bukkit.getRegionScheduler().run(this.plugin, loc, task -> {
-               target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 80, 0, false, false));
-               target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, 80, 0, false, false));
+               target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, ticks, 0, false, false));
+               target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, ticks, 0, false, false));
             });
             this.spawnBlackParticles(target, 4);
             this.meleeHitCounter.put(attacker.getUniqueId(), 0);
@@ -135,7 +160,11 @@ public class Invis implements Listener {
          if (ticksElapsed[0] >= maxTicks) {
             task.cancel();
          } else {
-            target.getWorld().spawnParticle(Particle.SQUID_INK, target.getLocation().add(0.0, 1.0, 0.0), 20, 0.0, 0.0, 0.0, 0.05);
+            int ink = Settings.particles(KEY, 20);
+            if (ink > 0) {
+               target.getWorld().spawnParticle(Particle.SQUID_INK, target.getLocation().add(0.0, 1.0, 0.0), ink, 0.0, 0.0, 0.0, 0.05);
+            }
+
             ticksElapsed[0] += 10;
          }
       }, 1L, 10L);
@@ -143,7 +172,7 @@ public class Invis implements Listener {
 
    @EventHandler
    public void onEntityTarget(EntityTargetEvent event) {
-      if (event.getTarget() instanceof Player target && this.hasImmortalHackEquipped(target)) {
+      if (event.getTarget() instanceof Player target && Settings.passive(KEY, "mob_invisibility") && this.hasImmortalHackEquipped(target)) {
          event.setCancelled(true);
       }
    }
@@ -157,20 +186,21 @@ public class Invis implements Listener {
          world.playSound(caster.getLocation(), Sound.ENTITY_WITHER_SHOOT, 0.5F, 1.0F);
          world.playSound(caster.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_SET_SPAWN, 0.5F, 0.5F);
          int duration = Infuse.getInstance().getConfig().getInt("durations.invis_spark", 10);
+         double radius = Infuse.getInstance().getConfig().getDouble("radius.invis", 10.0);
          long durationTicks = duration * 20L;
          Set<Player> vanishedPlayers = new HashSet<>();
          vanishedPlayers.add(caster);
 
          for (Player p : Bukkit.getOnlinePlayers()) {
             if (p.getWorld().equals(world)
-               && p.getLocation().distance(caster.getLocation()) <= this.radius
+               && p.getLocation().distance(caster.getLocation()) <= radius
                && Infuse.getInstance().getTrustManager().isTrusted(caster, p)) {
                vanishedPlayers.add(p);
             }
          }
 
          for (Player vp : vanishedPlayers) {
-            vp.hidePlayer(this.plugin, vp);
+            this.vanished.add(vp.getUniqueId());
 
             for (Player other : Bukkit.getOnlinePlayers()) {
                if (!vp.equals(other) && !Infuse.getInstance().getTrustManager().isTrusted(vp, other)) {
@@ -191,7 +221,7 @@ public class Invis implements Listener {
                      task.cancel();
 
                      for (Player vp2 : vanishedFinal) {
-                        vp2.showPlayer(this.plugin, vp2);
+                        this.vanished.remove(vp2.getUniqueId());
 
                         for (Player otherx : Bukkit.getOnlinePlayers()) {
                            otherx.showPlayer(this.plugin, vp2);
@@ -199,24 +229,30 @@ public class Invis implements Listener {
                      }
                   } else {
                      Location center = caster.getLocation();
-                     world.spawnParticle(Particle.LARGE_SMOKE, caster.getLocation(), 5, 0.2, 0.0, 0.2, 0.0);
+                     int smoke = Settings.particles(KEY, 5);
+                     if (smoke > 0) {
+                        world.spawnParticle(Particle.LARGE_SMOKE, caster.getLocation(), smoke, 0.2, 0.0, 0.2, 0.0);
+                     }
+
+                     int ink = Settings.particles(KEY, 20);
+
 
                      for (int angle = 0; angle < 360; angle += 5) {
                         double rad = Math.toRadians(angle);
-                        double baseX = center.getX() + this.radius * Math.cos(rad);
-                        double baseZ = center.getZ() + this.radius * Math.sin(rad);
+                        double baseX = center.getX() + radius * Math.cos(rad);
+                        double baseZ = center.getZ() + radius * Math.sin(rad);
 
-                        for (int i = 0; i < 3; i++) {
+                        for (int i = 0; i < 3 && ink > 0; i++) {
                            double offsetX = (Math.random() - 0.5) * 0.3;
                            double offsetZ = (Math.random() - 0.5) * 0.3;
                            Location particleLoc = new Location(world, baseX + offsetX, center.getY(), baseZ + offsetZ);
-                           world.spawnParticle(Particle.SQUID_INK, particleLoc.add(0.0, 1.5, 0.0), 20, 0.0, 0.0, 0.0, 0.05);
+                           world.spawnParticle(Particle.SQUID_INK, particleLoc.add(0.0, 1.5, 0.0), ink, 0.0, 0.0, 0.0, 0.05);
                         }
                      }
 
                      for (Player px : Bukkit.getOnlinePlayers()) {
                         if (px.getWorld().equals(world)
-                           && px.getLocation().distance(center) <= this.radius
+                           && px.getLocation().distance(center) <= radius
                            && !Infuse.getInstance().getTrustManager().isTrusted(caster, px)
                            && !px.equals(caster)) {
                            Location targetAnchor = px.getLocation();
@@ -259,6 +295,7 @@ public class Invis implements Listener {
          for (Player nearby : attacker.getWorld().getPlayers()) {
             if (!nearby.equals(attacker)
                && !attacker.canSee(nearby)
+               && this.vanished.contains(nearby.getUniqueId())
                && nearby.getLocation().distance(attacker.getLocation()) <= 3.0
                && this.isFacingEntityBody(attacker, nearby)
                && nearby.getNoDamageTicks() <= 0) {

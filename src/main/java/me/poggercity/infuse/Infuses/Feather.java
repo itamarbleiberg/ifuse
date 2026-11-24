@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import me.poggercity.infuse.Managers.TrustManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -36,15 +36,14 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 
 public class Feather implements Listener {
+   public static final String KEY = "feather";
    private static final String GEM_NAME = ChatColor.WHITE + "Feather Effect";
    private static final String EMERALD_KEY = "feather";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Plugin plugin;
    private final Map<UUID, Integer> hitCounter = new HashMap<>();
    private static final String DAMAGE = "damage.feather_spark";
    private final Set<UUID> landingPlayers = new HashSet<>();
    private final TrustManager trustManager = new TrustManager();
-   double radius = Infuse.getInstance().getConfig().getDouble("radius.feather", 4.0);
 
    public Feather(Plugin plugin) {
       this.plugin = plugin;
@@ -58,7 +57,11 @@ public class Feather implements Listener {
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "feather")) {
-         player.getWorld().spawnParticle(Particle.FALLING_NECTAR, player.getLocation().add(0.0, 1.0, 0.0), 20, 0.5, 0.5, 0.5, 0.1);
+         int nectar = Settings.particles(KEY, 20);
+         if (nectar > 0) {
+            player.getWorld().spawnParticle(Particle.FALLING_NECTAR, player.getLocation().add(0.0, 1.0, 0.0), nectar, 0.5, 0.5, 0.5, 0.1);
+         }
+
          player.playSound(player.getLocation(), Sound.ENTITY_PHANTOM_FLAP, 1.0F, 1.2F);
          Vector dashDirection = player.getEyeLocation().getDirection().normalize();
          Vector launchVector = dashDirection.multiply(0).setY(1);
@@ -89,7 +92,7 @@ public class Feather implements Listener {
             player.removePotionEffect(PotionEffectType.UNLUCK);
             Location loc = player.getLocation();
             World world = player.getWorld();
-            double explosionRadius = this.radius;
+            double explosionRadius = Infuse.getInstance().getConfig().getDouble("radius.feather", 4.0);
             double dmg = Infuse.getInstance().getConfig().getDouble("damage.feather_spark", 8.0);
             if (dmg <= 0.0) {
                dmg = 8.0;
@@ -112,7 +115,11 @@ public class Feather implements Listener {
                }
             }
 
-            world.spawnParticle(Particle.CLOUD, loc, 50, 0.0, 0.0, 0.0, 2.0);
+            int clouds = Settings.particles(KEY, 50);
+            if (clouds > 0) {
+               world.spawnParticle(Particle.CLOUD, loc, clouds, 0.0, 0.0, 0.0, 2.0);
+            }
+
             world.playSound(loc, Sound.ITEM_MACE_SMASH_GROUND_HEAVY, 1.5F, 1.0F);
             Location anchor = player.getLocation();
             Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
@@ -128,15 +135,20 @@ public class Feather implements Listener {
 
    @EventHandler
    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player attacker && (this.hasImmortalHackEquipped(attacker, "1") || this.hasImmortalHackEquipped(attacker, "2"))) {
+      if (event.getDamager() instanceof Player attacker
+         && Settings.passive(KEY, "fall_attack")
+         && (this.hasImmortalHackEquipped(attacker, "1") || this.hasImmortalHackEquipped(attacker, "2"))) {
          double fallDistance = attacker.getFallDistance();
-         if (fallDistance >= 7.0) {
+         if (fallDistance >= Settings.value(KEY, "fall_attack", "min_fall", 7.0)) {
             attacker.getWorld().playSound(attacker.getLocation(), Sound.ITEM_MACE_SMASH_AIR, 1.0F, 1.0F);
             World world = attacker.getWorld();
             Location particleLoc = event.getDamager().getLocation();
-            world.spawnParticle(Particle.GUST_EMITTER_SMALL, particleLoc, 1, 0.0, 0.0, 0.0, 0.0);
+            if (Settings.particles(KEY, 1) > 0) {
+               world.spawnParticle(Particle.GUST_EMITTER_SMALL, particleLoc, 1, 0.0, 0.0, 0.0, 0.0);
+            }
+
             attacker.setVelocity(new Vector(0.0, 1.8, 0.0));
-            double multiplier = Infuse.getInstance().getConfig().getDouble("damage.feather_mace", 1.5);
+            double multiplier = Settings.value(KEY, "fall_attack", "multiplier", 1.5);
             event.setDamage(event.getDamage() * multiplier);
          }
       }
@@ -146,11 +158,13 @@ public class Feather implements Listener {
    public void onPlayerHit(EntityDamageEvent event) {
       if (event.getEntity() instanceof Player) {
          Player player = (Player)event.getEntity();
-         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && event.getCause() != DamageCause.FALL) {
+         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))
+            && event.getCause() != DamageCause.FALL
+            && Settings.passive(KEY, "wind_charge_counter")) {
             UUID uuid = player.getUniqueId();
             int count = this.hitCounter.getOrDefault(uuid, 0) + 1;
             this.hitCounter.put(uuid, count);
-            if (count >= 10) {
+            if (count >= Math.max(1, Settings.intValue(KEY, "wind_charge_counter", "hits", 10))) {
                this.hitCounter.put(uuid, 0);
                Location chargeLocation = player.getLocation().add(0.0, 1.0, 0.0);
                WindCharge windCharge = (WindCharge)player.getWorld().spawn(chargeLocation, WindCharge.class);
@@ -168,7 +182,7 @@ public class Feather implements Listener {
    public void onPlayerFallDamage(EntityDamageEvent event) {
       if (event.getEntity() instanceof Player && event.getCause() == DamageCause.FALL) {
          Player player = (Player)event.getEntity();
-         if (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) {
+         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && Settings.passive(KEY, "no_fall_damage")) {
             event.setCancelled(true);
          }
       }
@@ -177,22 +191,28 @@ public class Feather implements Listener {
    @EventHandler
    public void onPlayerRightClickWindcharge(PlayerInteractEvent event) {
       Player player = event.getPlayer();
-      if (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) {
+      if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && Settings.passive(KEY, "wind_charge_cooldown")) {
          ItemStack item = player.getInventory().getItemInMainHand();
+         int ticks = Math.max(0, Settings.intValue(KEY, "wind_charge_cooldown", "ticks", 5));
          if (item != null
             && item.getType() == Material.WIND_CHARGE
             && !player.hasCooldown(Material.WIND_CHARGE)
             && (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR)) {
             Location anchor = player.getLocation();
-            Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> player.setCooldown(Material.WIND_CHARGE, 5), 1L);
+            Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> player.setCooldown(Material.WIND_CHARGE, ticks), 1L);
          }
       }
    }
 
    @EventHandler
    public void onWindChargeLaunch(ProjectileLaunchEvent event) {
-      if (event.getEntity() instanceof WindCharge fireball && fireball.getShooter() instanceof Player player) {
-         Vector direction = player.getEyeLocation().getDirection().normalize().multiply(2);
+      // Only for Feather users: this used to make every player's wind charges twice as fast and perfectly straight.
+      if (event.getEntity() instanceof WindCharge fireball
+         && fireball.getShooter() instanceof Player player
+         && Settings.passive(KEY, "wind_charge_boost")
+         && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))) {
+         double velocity = Math.max(0.1, Settings.value(KEY, "wind_charge_boost", "velocity", 2.0));
+         Vector direction = player.getEyeLocation().getDirection().normalize().multiply(velocity);
          fireball.setVelocity(direction);
       }
    }

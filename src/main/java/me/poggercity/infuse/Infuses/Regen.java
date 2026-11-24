@@ -3,7 +3,7 @@ package me.poggercity.infuse.Infuses;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -22,9 +22,9 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 public class Regen implements Listener {
+   public static final String KEY = "regen";
    private static final String GEM_NAME = ChatColor.LIGHT_PURPLE + "Regen Effect";
    private static final String SPARK_COOLDOWN_KEY = "regen";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Plugin plugin;
 
    public Regen(Plugin plugin) {
@@ -44,10 +44,14 @@ public class Regen implements Listener {
 
    @EventHandler
    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player player && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))) {
+      if (event.getDamager() instanceof Player player
+         && Settings.passive(KEY, "regen_on_hit")
+         && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))) {
+         int amplifier = Math.max(1, Settings.intValue(KEY, "regen_on_hit", "level", 2)) - 1;
+         int ticks = Math.max(1, Settings.intValue(KEY, "regen_on_hit", "seconds", 2)) * 20;
          Location anchor = player.getLocation();
          Bukkit.getRegionScheduler()
-            .run(Infuse.getInstance(), anchor, task -> player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 40, 1, false, false)));
+            .run(Infuse.getInstance(), anchor, task -> player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, ticks, amplifier, false, false)));
       }
    }
 
@@ -55,8 +59,10 @@ public class Regen implements Listener {
    public void onEntityDamageByEntityHeal(EntityDamageByEntityEvent event) {
       if (event.getEntity() instanceof Player) {
          Player player = (Player)event.getEntity();
-         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && event.getFinalDamage() <= 0.0) {
-            player.setSaturation(Math.min(player.getSaturation() + 6.0F, 20.0F));
+         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2"))
+            && event.getFinalDamage() <= 0.0
+            && Settings.passive(KEY, "extra_saturation")) {
+            player.setSaturation(Math.min(player.getSaturation() + (float)Settings.value(KEY, "extra_saturation", "amount", 6.0), 20.0F));
          }
       }
    }
@@ -90,6 +96,7 @@ public class Regen implements Listener {
 
             for (Player nearbyPlayer : damager.getWorld().getPlayers()) {
                if (!nearbyPlayer.equals(damager)
+                  && !nearbyPlayer.isDead()
                   && nearbyPlayer.getLocation().distance(damager.getLocation()) <= 5.0
                   && Infuse.getInstance().getTrustManager().isTrusted(damager, nearbyPlayer)) {
                   double allyMaxHealth = nearbyPlayer.getAttribute(Attribute.MAX_HEALTH).getValue();
@@ -103,8 +110,8 @@ public class Regen implements Listener {
    @EventHandler
    public void onConsume(PlayerItemConsumeEvent event) {
       Player player = event.getPlayer();
-      if (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) {
-         player.setSaturation(Math.min(player.getSaturation() + 6.0F, 20.0F));
+      if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && Settings.passive(KEY, "extra_saturation")) {
+         player.setSaturation(Math.min(player.getSaturation() + (float)Settings.value(KEY, "extra_saturation", "amount", 6.0), 20.0F));
       }
    }
 }

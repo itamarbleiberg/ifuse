@@ -8,7 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -32,33 +32,37 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 public class Frost implements Listener {
+   public static final String KEY = "frost";
    private final Set<UUID> frozenAttackers = new HashSet<>();
    private static final String GEM_NAME = ChatColor.AQUA + "Frost Effect";
    private static final String IMMORTAL_KEY = "frost";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Plugin plugin;
    private final Map<UUID, Integer> meleeHitCounter = new HashMap<>();
    private static final Set<Material> ICE_BLOCKS = EnumSet.of(Material.ICE, Material.SNOW_BLOCK, Material.PACKED_ICE, Material.BLUE_ICE);
-   double radius = Infuse.getInstance().getConfig().getDouble("radius.frost", 5.0);
 
    public Frost(Plugin plugin) {
       this.plugin = plugin;
    }
 
    public void applyFrostEffects() {
-      Bukkit.getOnlinePlayers()
-         .stream()
-         .filter(player -> this.hasImmortalHackEquipped(player) && player.getVelocity().lengthSquared() >= 0.01)
-         .forEach(
-            player -> {
-               Material blockBelow = player.getLocation().clone().subtract(0.0, 1.0, 0.0).getBlock().getType();
-               if (ICE_BLOCKS.contains(blockBelow)) {
-                  Location anchor = player.getLocation();
-                  Bukkit.getRegionScheduler()
-                     .run(Infuse.getInstance(), anchor, task -> player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 40, 2, false, false, false)));
+      if (Settings.passive(KEY, "ice_speed")) {
+         int amplifier = Math.max(1, Settings.intValue(KEY, "ice_speed", "level", 3)) - 1;
+         Bukkit.getOnlinePlayers()
+            .stream()
+            .filter(player -> this.hasImmortalHackEquipped(player) && player.getVelocity().lengthSquared() >= 0.01)
+            .forEach(
+               player -> {
+                  Material blockBelow = player.getLocation().clone().subtract(0.0, 1.0, 0.0).getBlock().getType();
+                  if (ICE_BLOCKS.contains(blockBelow)) {
+                     Location anchor = player.getLocation();
+                     Bukkit.getRegionScheduler()
+                        .run(
+                           Infuse.getInstance(), anchor, task -> player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 40, amplifier, false, false, false))
+                        );
+                  }
                }
-            }
-         );
+            );
+      }
    }
 
    public static boolean isStealthGem(ItemStack item) {
@@ -75,8 +79,10 @@ public class Frost implements Listener {
          && item.getType() == Material.WIND_CHARGE
          && (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK)
          && !player.hasCooldown(Material.WIND_CHARGE)
-         && player.getFreezeTicks() > 1) {
-         Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> player.setCooldown(Material.WIND_CHARGE, 60), 1L);
+         && player.getFreezeTicks() > 1
+         && Settings.passive(KEY, "frozen_wind_charge_cooldown")) {
+         int ticks = (int)Math.round(Math.max(0.0, Settings.value(KEY, "frozen_wind_charge_cooldown", "seconds", 3.0)) * 20.0);
+         Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> player.setCooldown(Material.WIND_CHARGE, ticks), 1L);
       }
    }
 
@@ -95,14 +101,16 @@ public class Frost implements Listener {
                return;
             }
 
-            int count = this.meleeHitCounter.getOrDefault(attacker.getUniqueId(), 0) + 1;
-            this.meleeHitCounter.put(attacker.getUniqueId(), count);
-            if (count >= 10) {
-               this.meleeHitCounter.put(attacker.getUniqueId(), 0);
-               playerTarget.setFreezeTicks(200);
+            if (Settings.passive(KEY, "freeze_on_hit")) {
+               int count = this.meleeHitCounter.getOrDefault(attacker.getUniqueId(), 0) + 1;
+               this.meleeHitCounter.put(attacker.getUniqueId(), count);
+               if (count >= Math.max(1, Settings.intValue(KEY, "freeze_on_hit", "hits", 10))) {
+                  this.meleeHitCounter.put(attacker.getUniqueId(), 0);
+                  playerTarget.setFreezeTicks(Math.max(1, Settings.intValue(KEY, "freeze_on_hit", "seconds", 10)) * 20);
+               }
             }
-         } else {
-            target.setFreezeTicks(200);
+         } else if (Settings.passive(KEY, "freeze_mobs")) {
+            target.setFreezeTicks(Math.max(1, Settings.intValue(KEY, "freeze_mobs", "seconds", 10)) * 20);
          }
       }
    }
@@ -110,7 +118,11 @@ public class Frost implements Listener {
    public void activateSpark(Player caster) {
       UUID playerUUID = caster.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "frost")) {
-         caster.getWorld().spawnParticle(Particle.SNOWFLAKE, caster.getLocation().add(0.0, 1.0, 0.0), 25, 0.5, 0.5, 0.5, 0.1);
+         int flakes = Settings.particles(KEY, 25);
+         if (flakes > 0) {
+            caster.getWorld().spawnParticle(Particle.SNOWFLAKE, caster.getLocation().add(0.0, 1.0, 0.0), flakes, 0.5, 0.5, 0.5, 0.1);
+         }
+
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
          int duration = Infuse.getInstance().getConfig().getInt("durations.frost_spark", 10);
          Location anchor = caster.getLocation();
@@ -125,12 +137,15 @@ public class Frost implements Listener {
          Location center = caster.getLocation();
          World world = caster.getWorld();
          Set<Player> affectedPlayers = new HashSet<>();
+         double radius = Infuse.getInstance().getConfig().getDouble("radius.frost", 5.0);
 
          for (Player player : Bukkit.getOnlinePlayers()) {
+            // Trust is checked the same way as every other ability: whether the caster trusts the target (this was the
+            // other way round, so the caster's own trusted friends were hit and untrusted players could opt out).
             if (!player.equals(caster)
-               && !Infuse.getInstance().getTrustManager().isTrusted(player, caster)
+               && !Infuse.getInstance().getTrustManager().isTrusted(caster, player)
                && player.getWorld().equals(world)
-               && player.getLocation().distance(center) <= this.radius) {
+               && player.getLocation().distance(center) <= radius) {
                affectedPlayers.add(player);
                AttributeInstance jumpAttribute = player.getAttribute(Attribute.JUMP_STRENGTH);
                if (jumpAttribute != null) {
@@ -144,7 +159,7 @@ public class Frost implements Listener {
             for (Player playerx : affectedPlayers) {
                AttributeInstance jumpAttributex = playerx.getAttribute(Attribute.JUMP_STRENGTH);
                if (jumpAttributex != null) {
-                  jumpAttributex.setBaseValue(0.42);
+                  jumpAttributex.setBaseValue(jumpAttributex.getDefaultValue());
                }
             }
 
@@ -158,7 +173,7 @@ public class Frost implements Listener {
       Player player = event.getPlayer();
       AttributeInstance jumpAttribute = player.getAttribute(Attribute.JUMP_STRENGTH);
       if (jumpAttribute != null && jumpAttribute.getBaseValue() == 0.0) {
-         jumpAttribute.setBaseValue(0.42);
+         jumpAttribute.setBaseValue(jumpAttribute.getDefaultValue());
       }
    }
 

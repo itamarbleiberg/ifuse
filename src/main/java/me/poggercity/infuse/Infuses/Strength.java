@@ -3,7 +3,7 @@ package me.poggercity.infuse.Infuses;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -27,10 +27,10 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 
 public class Strength implements Listener {
+   public static final String KEY = "strength";
    private static final String GEM_NAME = ChatColor.DARK_RED + "Strength Effect";
    private static final String AUTO_CRIT_KEY = "st";
    private static final double CRIT_MULTIPLIER = 1.35;
-   private final PlayerHackManager hackManager = new PlayerHackManager();
 
    private boolean hasStrengthHackEquipped(Player player) {
       UUID uuid = player.getUniqueId();
@@ -40,13 +40,8 @@ public class Strength implements Listener {
          || commonHack != null && (commonHack.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || commonHack.equals("Augmented Strength Effect"));
    }
 
-   private boolean hasImmortalHackEquipped2(Player player, String tier) {
-      String currentHack = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), tier);
-      return currentHack != null && (currentHack.equals(GEM_NAME) || currentHack.equals("Augmented Strength Effect"));
-   }
-
    private void updateAttackDamageBasedOnHealth(Player player) {
-      if (!this.hasStrengthHackEquipped(player)) {
+      if (!this.hasStrengthHackEquipped(player) || !Settings.passive(KEY, "low_health_damage")) {
          this.resetAttackDamage(player);
       } else {
          double currentHealth = player.getHealth();
@@ -65,6 +60,15 @@ public class Strength implements Listener {
             if (baseValue != newValue) {
                attackDamage.setBaseValue(newValue);
             }
+         }
+      }
+   }
+
+   /** Runs every tick so the low-health bonus follows health right away, and is removed when Strength is gone. */
+   public void tickAttackDamage() {
+      for (Player player : Bukkit.getOnlinePlayers()) {
+         if (!player.isDead()) {
+            this.updateAttackDamageBasedOnHealth(player);
          }
       }
    }
@@ -101,8 +105,11 @@ public class Strength implements Listener {
             event.setDamage(critDamage);
             Entity hitEntity = event.getEntity();
             hitEntity.getWorld().playSound(hitEntity.getLocation(), Sound.ENTITY_PLAYER_ATTACK_CRIT, 1.0F, 1.0F);
-            hitEntity.getWorld().spawnParticle(Particle.CRIT, hitEntity.getLocation().add(0.0, 1.5, 0.0), 20, 0.0, 0.0, 0.0, 0.5);
-            hitEntity.getWorld().spawnParticle(Particle.CRIT, hitEntity.getLocation().add(0.0, 0.5, 0.0), 20, 0.0, 0.0, 0.0, 0.5);
+            int crits = Settings.particles(KEY, 20);
+            if (crits > 0) {
+               hitEntity.getWorld().spawnParticle(Particle.CRIT, hitEntity.getLocation().add(0.0, 1.5, 0.0), crits, 0.0, 0.0, 0.0, 0.5);
+               hitEntity.getWorld().spawnParticle(Particle.CRIT, hitEntity.getLocation().add(0.0, 0.5, 0.0), crits, 0.0, 0.0, 0.0, 0.5);
+            }
          }
 
          this.updateAttackDamageBasedOnHealth(player);
@@ -114,6 +121,7 @@ public class Strength implements Listener {
       if (event.getEntity() instanceof Player player
          && event.getBow() != null
          && event.getBow().getType() == Material.BOW
+         && Settings.passive(KEY, "piercing_arrows")
          && this.hasStrengthHackEquipped(player)
          && event.getProjectile() instanceof Arrow arrow) {
          arrow.setPierceLevel(100);
@@ -125,9 +133,10 @@ public class Strength implements Listener {
       if (event.getDamager() instanceof Player attacker
          && event.getEntity() instanceof LivingEntity entity
          && !(entity instanceof Player)
+         && Settings.passive(KEY, "mob_damage")
          && this.hasStrengthHackEquipped(attacker)) {
          double originalDamage = event.getDamage();
-         event.setDamage(originalDamage * 2.0);
+         event.setDamage(originalDamage * Math.max(0.0, Settings.value(KEY, "mob_damage", "multiplier", 2.0)));
       }
    }
 
@@ -139,6 +148,7 @@ public class Strength implements Listener {
             && player.isBlocking()
             && event.getDamager() instanceof Player attacker
             && attacker.getInventory().getItemInMainHand().getType().toString().endsWith("_AXE")
+            && Settings.passive(KEY, "shield_disable")
             && this.hasStrengthHackEquipped(attacker)) {
             player.getWorld().playSound(player.getLocation(), Sound.ITEM_SHIELD_BREAK, 1.0F, 1.0F);
             Location anchor = player.getLocation();
@@ -175,6 +185,6 @@ public class Strength implements Listener {
    }
 
    private void stunShield(Player player) {
-      player.setCooldown(Material.SHIELD, 200);
+      player.setCooldown(Material.SHIELD, Math.max(1, Settings.intValue(KEY, "shield_disable", "seconds", 10)) * 20);
    }
 }

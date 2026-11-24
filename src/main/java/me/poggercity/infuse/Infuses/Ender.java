@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.Map.Entry;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.FluidCollisionMode;
@@ -45,6 +46,12 @@ import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
 public class Ender implements Listener {
+   public static final String KEY = "ender";
+
+   private static boolean isSelector(ItemStack item) {
+      ItemMeta meta = item.getItemMeta();
+      return meta != null && meta.hasDisplayName() && ChatColor.stripColor(meta.getDisplayName()).equalsIgnoreCase("Choose your Effect");
+   }
    private static final String HEALTH_KEY = "ender";
    private final Map<UUID, Long> cursedPlayers = new HashMap<>();
    private final Set<UUID> currentlySharing = new HashSet<>();
@@ -53,7 +60,7 @@ public class Ender implements Listener {
    public static boolean isStrengthGem(ItemStack item) {
       if (item != null && item.getType() == Material.POTION) {
          ItemMeta meta = item.getItemMeta();
-         return meta != null && meta.getCustomModelData() == 1000;
+         return meta != null && meta.hasCustomModelData() && meta.getCustomModelData() == 1000;
       } else {
          return false;
       }
@@ -61,9 +68,17 @@ public class Ender implements Listener {
 
    public void startTrackingTask() {
       List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("configs.disabled_worlds").stream().map(String::toLowerCase).toList();
-      double radius = Infuse.getInstance().getConfig().getDouble("radius.ender", 50.0);
+      if (!Settings.passive(KEY, "glowing")) {
+         return;
+      }
+
+      double radius = Settings.value(KEY, "glowing", "radius", 50.0);
 
       for (Player player : Bukkit.getOnlinePlayers()) {
+         if (!this.hasImmortalHackEquipped(player)) {
+            continue;
+         }
+
          Location location = player.getLocation();
          Bukkit.getRegionScheduler()
             .run(
@@ -89,12 +104,15 @@ public class Ender implements Listener {
    public void onRightClick(PlayerInteractEvent event) {
       Player player = event.getPlayer();
       ItemStack item = event.getItem();
+      // The effect selector is also a dragon's breath item; it must never be shot (that used it up).
       if (this.hasImmortalHackEquipped(player)
+         && Settings.passive(KEY, "dragon_fireball")
          && item != null
          && item.getType() == Material.DRAGON_BREATH
+         && !isSelector(item)
          && (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK)
          && !player.hasCooldown(Material.DRAGON_BREATH)) {
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.ender_dragon_breath", 30);
+         int configcooldown = Settings.intValue(KEY, "dragon_fireball", "cooldown_seconds", 30);
          player.setCooldown(Material.DRAGON_BREATH, configcooldown * 20);
          item.setAmount(item.getAmount() - 1);
          Location loc = player.getEyeLocation().add(player.getLocation().getDirection().multiply(1));
@@ -110,9 +128,12 @@ public class Ender implements Listener {
       if (event.getEntity() instanceof DragonFireball fireball
          && fireball.getShooter() instanceof Player shooter
          && event.getHitEntity() instanceof Player target
-         && !target.equals(shooter)) {
+         && !target.equals(shooter)
+         && !Infuse.getInstance().getTrustManager().isTrusted(shooter, target)) {
          target.damage(4.0, shooter);
-         this.applyCursed(target);
+         if (Settings.passive(KEY, "curse")) {
+            this.applyCursed(target);
+         }
       }
    }
 
@@ -120,7 +141,12 @@ public class Ender implements Listener {
    public void onAreaEffectCloudSpawn(EntitySpawnEvent event) {
       if (event.getEntity() instanceof AreaEffectCloud cloud && cloud.getParticle() == Particle.DRAGON_BREATH) {
          ProjectileSource source = cloud.getSource();
-         Player owner = source instanceof Player ? (Player)source : null;
+         // Only clouds from an Ender player's fireball curse. Clouds without a player owner (the Ender Dragon's own
+         // breath during the dragon fight) used to curse every player standing in them.
+         if (!(source instanceof Player owner) || !this.hasImmortalHackEquipped(owner) || !Settings.passive(KEY, "curse")) {
+            return;
+         }
+
          Bukkit.getRegionScheduler()
             .runAtFixedRate(
                Infuse.getInstance(),
@@ -129,7 +155,8 @@ public class Ender implements Listener {
                   if (cloud.isValid() && !cloud.isDead()) {
                      for (Entity nearbyEntity : cloud.getNearbyEntities(cloud.getRadius(), 0.75, cloud.getRadius())) {
                         if (nearbyEntity instanceof Player player
-                           && (owner == null || !player.equals(owner) && !Infuse.getInstance().getTrustManager().isTrusted(owner, player))
+                           && !player.equals(owner)
+                           && !Infuse.getInstance().getTrustManager().isTrusted(owner, player)
                            && !this.cursedPlayers.containsKey(player.getUniqueId())) {
                            this.applyCursed(player);
                         }
@@ -184,9 +211,15 @@ public class Ender implements Listener {
 
    private void applyCursed(Player player) {
       UUID uuid = player.getUniqueId();
-      double time = Infuse.getInstance().getConfig().getDouble("durations.dragon_curse_duration", 7.0);
+      double time = Math.max(0.5, Settings.value(KEY, "curse", "seconds", 7.0));
       long expireTime = System.currentTimeMillis() + (long)(time * 1000.0);
       this.cursedPlayers.put(uuid, expireTime);
+      // Being cursed again used to add a second boss bar and lose track of the first, which then never went away.
+      BossBar previous = this.activeBars.remove(uuid);
+      if (previous != null) {
+         previous.removeAll();
+      }
+
       BossBar bar = Bukkit.createBossBar(ChatColor.LIGHT_PURPLE + "Cursed", BarColor.PURPLE, BarStyle.SOLID, new BarFlag[0]);
       bar.addPlayer(player);
       bar.setProgress(1.0);
@@ -244,7 +277,11 @@ public class Ender implements Listener {
          Vector originalVelocity = player.getVelocity();
          player.teleportAsync(finalTarget);
          player.setVelocity(originalVelocity);
-         player.getWorld().spawnParticle(Particle.REVERSE_PORTAL, finalTarget, 40, 0.5, 1.0, 0.5, 0.5);
+         int portal = Settings.particles(KEY, 40);
+         if (portal > 0) {
+            player.getWorld().spawnParticle(Particle.REVERSE_PORTAL, finalTarget, portal, 0.5, 1.0, 0.5, 0.5);
+         }
+
          CooldownManager.setDuration(playerUUID, "ender", 1L);
          int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.ender_spark", 10);
          CooldownManager.setCooldown(playerUUID, "ender", configcooldown + 2L);

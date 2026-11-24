@@ -11,7 +11,7 @@ import java.util.Set;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
-import me.poggercity.infuse.Managers.PlayerHackManager;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -34,14 +34,13 @@ import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.Plugin;
 
 public class Thunder implements Listener {
+   public static final String KEY = "thunder";
    private final Set<UUID> frozenAttackers = new HashSet<>();
    private static final String GEM_NAME = ChatColor.YELLOW + "Thunder Effect";
    private static final String THUNDER = "thunder";
-   private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Plugin plugin;
    private final Map<UUID, Integer> meleeHitCounter = new HashMap<>();
    private final Set<UUID> activeSparks = new HashSet<>();
-   double radius = Infuse.getInstance().getConfig().getDouble("radius.thunder", 7.0);
    private final Map<UUID, Long> entityLightningCooldowns = new HashMap<>();
    private static final long LIGHTNING_COOLDOWN_MS = 2000L;
    private final Map<UUID, Map<UUID, Integer>> hitCounts = new HashMap<>();
@@ -50,10 +49,23 @@ public class Thunder implements Listener {
       this.plugin = plugin;
    }
 
+   // damage.thunder_hearts existed in the config but every strike did a hardcoded 1 heart. It is now the
+   // smite_on_hit "hearts" setting and is used for all strikes.
+   private static double strikeHearts() {
+      return Settings.value(KEY, "smite_on_hit", "hearts", 1.0);
+   }
+
    private void applyThunderDamage(LivingEntity target, double hearts) {
       if (!(hearts <= 0.0)) {
          double damage = hearts * 2.0;
          target.damage(damage, (Entity)null);
+      }
+   }
+
+   private static void strikeParticles(Location location) {
+      int count = Settings.particles(KEY, 10);
+      if (count > 0) {
+         location.getWorld().spawnParticle(Particle.DUST, location, count, 0.5, 0.5, 0.5, 0.0, new DustOptions(Color.YELLOW, 1.5F));
       }
    }
 
@@ -81,16 +93,18 @@ public class Thunder implements Listener {
    public void onTridentHit(EntityDamageByEntityEvent event) {
       if (event.getDamager() instanceof Trident trident && !trident.hasMetadata("thunderProcessed")) {
          trident.setMetadata("thunderProcessed", new FixedMetadataValue(this.plugin, true));
-         if (trident.getShooter() instanceof Player attacker && this.hasImmortalHackEquipped(attacker) && event.getEntity() instanceof LivingEntity target) {
+         if (trident.getShooter() instanceof Player attacker
+            && Settings.passive(KEY, "trident_smite")
+            && this.hasImmortalHackEquipped(attacker)
+            && event.getEntity() instanceof LivingEntity target) {
             if (target instanceof Player tp && Infuse.getInstance().getTrustManager().isTrusted(attacker, tp)) {
                return;
             }
 
             target.getWorld().strikeLightningEffect(target.getLocation());
-            this.applyThunderDamage(target, 1.0);
+            this.applyThunderDamage(target, strikeHearts());
             attacker.playSound(attacker.getLocation(), Sound.ITEM_TRIDENT_THUNDER, 1.0F, 1.0F);
-            target.getWorld()
-               .spawnParticle(Particle.DUST, target.getLocation().add(0.0, 1.0, 0.0), 10, 0.5, 0.5, 0.5, 0.0, new DustOptions(Color.YELLOW, 1.5F));
+            strikeParticles(target.getLocation().add(0.0, 1.0, 0.0));
          }
       }
    }
@@ -99,6 +113,7 @@ public class Thunder implements Listener {
       UUID playerUUID = caster.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "thunder")) {
          int duration = Infuse.getInstance().getConfig().getInt("durations.thunder_spark", 10);
+         double radius = Infuse.getInstance().getConfig().getDouble("radius.thunder", 7.0);
          particles.spawnEffect("thunder", caster, Color.fromRGB(252, 237, 0));
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
          this.activeSparks.add(playerUUID);
@@ -123,11 +138,11 @@ public class Thunder implements Listener {
                   } else {
                      Location center = caster.getLocation();
                      if (center.getWorld().equals(world)) {
-                        if (ticksElapsed[0] % 5 == 0) {
+                        if (ticksElapsed[0] % 5 == 0 && Settings.particles(KEY, 1) > 0) {
                            for (int angle = 0; angle < 360; angle += 15) {
                               double radians = Math.toRadians(angle);
-                              double x = center.getX() + this.radius * Math.cos(radians);
-                              double z = center.getZ() + this.radius * Math.sin(radians);
+                              double x = center.getX() + radius * Math.cos(radians);
+                              double z = center.getZ() + radius * Math.sin(radians);
                               double y = center.getY();
                               Location particleLoc = new Location(world, x, y, z);
                               world.spawnParticle(Particle.DUST, particleLoc, 1, 0.0, 0.0, 0.0, 0.0, new DustOptions(Color.GRAY, 1.0F));
@@ -136,7 +151,7 @@ public class Thunder implements Listener {
                            }
                         }
 
-                        for (Entity entity : world.getNearbyEntities(center, this.radius, this.radius, this.radius)) {
+                        for (Entity entity : world.getNearbyEntities(center, radius, radius, radius)) {
                            if (entity instanceof LivingEntity target
                               && !target.equals(caster)
                               && !(target instanceof Player p && Infuse.getInstance().getTrustManager().isTrusted(caster, p))) {
@@ -145,10 +160,8 @@ public class Thunder implements Listener {
                                  int strikes = strikeCount.getOrDefault(targetUUID, 0);
                                  if (strikes < 3) {
                                     target.getWorld().strikeLightningEffect(target.getLocation());
-                                    this.applyThunderDamage(target, 1.0);
-                                    world.spawnParticle(
-                                       Particle.DUST, target.getLocation().add(0.0, 0.0, 0.0), 10, 0.5, 0.5, 0.5, 0.0, new DustOptions(Color.YELLOW, 1.5F)
-                                    );
+                                    this.applyThunderDamage(target, strikeHearts());
+                                    strikeParticles(target.getLocation().add(0.0, 0.0, 0.0));
                                     CooldownManager.setCooldown(targetUUID, "chill", 2L);
                                     strikeCount.put(targetUUID, strikes + 1);
                                  }
@@ -171,7 +184,10 @@ public class Thunder implements Listener {
 
    @EventHandler
    public void onPlayerAttack(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player attacker && this.hasImmortalHackEquipped(attacker) && event.getEntity() instanceof LivingEntity target) {
+      if (event.getDamager() instanceof Player attacker
+         && Settings.passive(KEY, "chain_lightning")
+         && this.hasImmortalHackEquipped(attacker)
+         && event.getEntity() instanceof LivingEntity target) {
          if (target instanceof Player tp && Infuse.getInstance().getTrustManager().isTrusted(attacker, tp)) {
             return;
          }
@@ -185,13 +201,10 @@ public class Thunder implements Listener {
             Optional<Entity> nextChainTarget = nearbyEntities.stream().filter(e -> e instanceof LivingEntity && !e.equals(attacker)).findFirst();
             if (nextChainTarget.isPresent()) {
                target.getWorld().strikeLightningEffect(target.getLocation());
-               this.applyThunderDamage(target, 1.0);
+               this.applyThunderDamage(target, strikeHearts());
                CooldownManager.setCooldown(targetUUID, "lightning", 1L);
-               target.getWorld()
-                  .spawnParticle(Particle.DUST, target.getLocation().add(0.0, 1.0, 0.0), 10, 0.5, 0.5, 0.5, 0.0, new DustOptions(Color.YELLOW, 1.5F));
-               if (Infuse.getInstance().getConfig().getBoolean("configs.chain_lightning")) {
-                  this.chainLightning(target, attacker);
-               }
+               strikeParticles(target.getLocation().add(0.0, 1.0, 0.0));
+               this.chainLightning(target, attacker);
             }
          }
       }
@@ -225,8 +238,8 @@ public class Thunder implements Listener {
                   }
 
                   le.getWorld().strikeLightningEffect(le.getLocation());
-                  this.applyThunderDamage(le, 1.0);
-                  le.getWorld().spawnParticle(Particle.DUST, le.getLocation().add(0.0, 1.0, 0.0), 10, 0.5, 0.5, 0.5, 0.0, new DustOptions(Color.YELLOW, 1.5F));
+                  this.applyThunderDamage(le, strikeHearts());
+                  strikeParticles(le.getLocation().add(0.0, 1.0, 0.0));
                   strikes[0]++;
 
                   for (Entity e : le.getNearbyEntities(3.0, 3.0, 3.0)) {
@@ -244,13 +257,18 @@ public class Thunder implements Listener {
 
    @EventHandler
    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player player && event.getEntity() instanceof LivingEntity target && this.hasImmortalHackEquipped(player)) {
+      if (event.getDamager() instanceof Player player
+         && event.getEntity() instanceof LivingEntity target
+         && Settings.passive(KEY, "smite_on_hit")
+         && this.hasImmortalHackEquipped(player)) {
          UUID playerUUID = player.getUniqueId();
          UUID targetUUID = target.getUniqueId();
          World world = player.getWorld();
          boolean isWeatherNotClear = world.hasStorm() || world.isThundering();
          boolean isInOverworld = world.getEnvironment() == Environment.NORMAL;
-         int hitThreshold = isWeatherNotClear && isInOverworld ? 5 : 10;
+         int hitThreshold = Math.max(1, isWeatherNotClear && isInOverworld
+            ? Settings.intValue(KEY, "smite_on_hit", "rain_hits", 5)
+            : Settings.intValue(KEY, "smite_on_hit", "hits", 10));
          this.hitCounts.putIfAbsent(playerUUID, new HashMap<>());
          Map<UUID, Integer> playerHits = this.hitCounts.get(playerUUID);
          int hitCount = playerHits.getOrDefault(targetUUID, 0) + 1;
@@ -263,9 +281,8 @@ public class Thunder implements Listener {
 
             this.Strike((Player)(target instanceof Player ? target : null));
             target.getWorld().strikeLightningEffect(target.getLocation());
-            this.applyThunderDamage(target, 1.0);
-            target.getWorld()
-               .spawnParticle(Particle.DUST, target.getLocation().add(0.0, 1.0, 0.0), 10, 0.5, 0.5, 0.5, 0.0, new DustOptions(Color.YELLOW, 1.5F));
+            this.applyThunderDamage(target, strikeHearts());
+            strikeParticles(target.getLocation().add(0.0, 1.0, 0.0));
             player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_THUNDER, 1.0F, 1.0F);
             playerHits.put(targetUUID, 0);
          }
@@ -276,8 +293,8 @@ public class Thunder implements Listener {
       if (target != null && !CooldownManager.isOnCooldown(target.getUniqueId(), "lightning")) {
          target.getWorld().strikeLightningEffect(target.getLocation());
          CooldownManager.setCooldown(target.getUniqueId(), "lightning", 1L);
-         this.applyThunderDamage(target, 1.0);
-         target.getWorld().spawnParticle(Particle.DUST, target.getLocation().add(0.0, 1.0, 0.0), 10, 0.5, 0.5, 0.5, 0.0, new DustOptions(Color.YELLOW, 1.5F));
+         this.applyThunderDamage(target, strikeHearts());
+         strikeParticles(target.getLocation().add(0.0, 1.0, 0.0));
       }
    }
 }

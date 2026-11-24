@@ -758,6 +758,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
          this.ocean.tickAttributes();
          this.toolBonuses.tickAttributes();
          this.heart.tickMaxHealth();
+         this.strength.tickAttackDamage();
       }, 1L, 1L);
    }
 
