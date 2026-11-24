@@ -476,9 +476,9 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    @EventHandler
    public void onPlayerRespawn(PlayerRespawnEvent event) {
       Player player = event.getPlayer();
-      if (player.getAttribute(Attribute.GENERIC_MAX_HEALTH).getBaseValue() != 20.0) {
+      if (player.getAttribute(Attribute.MAX_HEALTH).getBaseValue() != 20.0) {
          Location anchor = player.getLocation();
-         Bukkit.getRegionScheduler().runDelayed(this, anchor, task -> player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(20.0), 10L);
+         Bukkit.getRegionScheduler().runDelayed(this, anchor, task -> player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(20.0), 10L);
       }
    }
 

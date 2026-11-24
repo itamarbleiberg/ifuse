@@ -50,7 +50,7 @@ public class Strength implements Listener {
          this.resetAttackDamage(player);
       } else {
          double currentHealth = player.getHealth();
-         AttributeInstance attackDamage = player.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE);
+         AttributeInstance attackDamage = player.getAttribute(Attribute.ATTACK_DAMAGE);
          if (attackDamage != null) {
             double baseValue = attackDamage.getBaseValue();
             double newValue = 1.0;
@@ -70,7 +70,7 @@ public class Strength implements Listener {
    }
 
    private void resetAttackDamage(Player player) {
-      AttributeInstance attackDamage = player.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE);
+      AttributeInstance attackDamage = player.getAttribute(Attribute.ATTACK_DAMAGE);
       if (attackDamage != null && attackDamage.getBaseValue() != 1.0) {
          attackDamage.setBaseValue(1.0);
       }

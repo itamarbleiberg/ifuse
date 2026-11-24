@@ -370,7 +370,7 @@ public class Ocean implements Listener {
       if (event.getFrom().getBlockX() != event.getTo().getBlockX()
          || event.getFrom().getBlockY() != event.getTo().getBlockY()
          || event.getFrom().getBlockZ() != event.getTo().getBlockZ()) {
-         AttributeInstance waterAttr = player.getAttribute(Attribute.GENERIC_WATER_MOVEMENT_EFFICIENCY);
+         AttributeInstance waterAttr = player.getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY);
          if (waterAttr != null) {
             UUID uuid = player.getUniqueId();
             double current = waterAttr.getBaseValue();

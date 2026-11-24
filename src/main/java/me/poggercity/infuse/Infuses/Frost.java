@@ -132,7 +132,7 @@ public class Frost implements Listener {
                && player.getWorld().equals(world)
                && player.getLocation().distance(center) <= this.radius) {
                affectedPlayers.add(player);
-               AttributeInstance jumpAttribute = player.getAttribute(Attribute.GENERIC_JUMP_STRENGTH);
+               AttributeInstance jumpAttribute = player.getAttribute(Attribute.JUMP_STRENGTH);
                if (jumpAttribute != null) {
                   jumpAttribute.setBaseValue(0.0);
                }
@@ -142,7 +142,7 @@ public class Frost implements Listener {
          this.frozenAttackers.add(caster.getUniqueId());
          Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
             for (Player playerx : affectedPlayers) {
-               AttributeInstance jumpAttributex = playerx.getAttribute(Attribute.GENERIC_JUMP_STRENGTH);
+               AttributeInstance jumpAttributex = playerx.getAttribute(Attribute.JUMP_STRENGTH);
                if (jumpAttributex != null) {
                   jumpAttributex.setBaseValue(0.42);
                }
@@ -156,7 +156,7 @@ public class Frost implements Listener {
    @EventHandler
    public void onPlayerJoin(PlayerJoinEvent event) {
       Player player = event.getPlayer();
-      AttributeInstance jumpAttribute = player.getAttribute(Attribute.GENERIC_JUMP_STRENGTH);
+      AttributeInstance jumpAttribute = player.getAttribute(Attribute.JUMP_STRENGTH);
       if (jumpAttribute != null && jumpAttribute.getBaseValue() == 0.0) {
          jumpAttribute.setBaseValue(0.42);
       }

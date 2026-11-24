@@ -143,11 +143,11 @@ public class Apophis implements Listener {
          int duration = Infuse.getInstance().getConfig().getInt("durations.apophis_spark", 20);
          Location anchor = player.getLocation();
          Bukkit.getRegionScheduler().run(Infuse.getInstance(), anchor, task -> {
-            double base = player.getAttribute(Attribute.GENERIC_MAX_HEALTH).getBaseValue();
+            double base = player.getAttribute(Attribute.MAX_HEALTH).getBaseValue();
             if (base < 40.0) {
                double next = Math.min(base + 20.0, 40.0);
-               player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(next);
-               player.setHealth(Math.min(player.getHealth() + 20.0, player.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue()));
+               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(next);
+               player.setHealth(Math.min(player.getHealth() + 20.0, player.getAttribute(Attribute.MAX_HEALTH).getValue()));
             }
          });
          CooldownManager.setDuration(uuid, "st", duration);
@@ -192,7 +192,7 @@ public class Apophis implements Listener {
          CooldownManager.setCooldown(uuid, "apophis", finalCd);
          Bukkit.getRegionScheduler().runDelayed(Infuse.getInstance(), anchor, task -> {
             if (player.isOnline()) {
-               player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(20.0);
+               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(20.0);
                if (player.getHealth() > 20.0) {
                   player.setHealth(20.0);
                }

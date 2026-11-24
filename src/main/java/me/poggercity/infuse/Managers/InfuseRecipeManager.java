@@ -53,7 +53,6 @@ import org.bukkit.inventory.RecipeChoice.ExactChoice;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.potion.PotionData;
 import org.bukkit.potion.PotionType;
 import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.NotNull;
@@ -590,7 +589,7 @@ public class InfuseRecipeManager implements Listener {
    private static ItemStack buildHealingPotionStack() {
       ItemStack healing = new ItemStack(Material.POTION);
       PotionMeta pm = (PotionMeta)healing.getItemMeta();
-      pm.setBasePotionData(new PotionData(PotionType.HEALING));
+      pm.setBasePotionType(PotionType.HEALING);
       healing.setItemMeta(pm);
       return healing;
    }

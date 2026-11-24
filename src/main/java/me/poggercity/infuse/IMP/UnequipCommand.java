@@ -80,12 +80,12 @@ public class UnequipCommand implements CommandExecutor, Listener {
                   }, 10L);
                   Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
                      if (!this.hasVirusGlitchGemEquipped(player, "1") && !this.hasVirusGlitchGemEquipped(player, "2")) {
-                        player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(20.0);
+                        player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(20.0);
                      }
                   }, 20L);
                   Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
                      if (!this.hasOceanGlitchGemEquipped(player, "1") || !this.hasOceanGlitchGemEquipped(player, "2")) {
-                        player.getAttribute(Attribute.GENERIC_WATER_MOVEMENT_EFFICIENCY).setBaseValue(0.0);
+                        player.getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY).setBaseValue(0.0);
                      }
                   }, 20L);
                   return true;

@@ -101,16 +101,16 @@ public class HackEquipListener implements Listener, CommandExecutor {
          this.hackManager.setHack(player.getUniqueId(), "1", hackName);
          Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> {
             if (!this.hasVirusGlitchGemEquipped(player, "1") || !this.hasVirusGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(20.0);
+               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(20.0);
             } else if (this.hasVirusGlitchGemEquipped(player, "1") || this.hasVirusGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(30.0);
+               player.getAttribute(Attribute.MAX_HEALTH).setBaseValue(30.0);
             }
          }, 20L);
          Bukkit.getGlobalRegionScheduler().runDelayed(Infuse.getInstance(), task -> {
             if (!this.hasOceanGlitchGemEquipped(player, "1") || !this.hasOceanGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.GENERIC_WATER_MOVEMENT_EFFICIENCY).setBaseValue(0.0);
+               player.getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY).setBaseValue(0.0);
             } else if (this.hasOceanGlitchGemEquipped(player, "1") || this.hasOceanGlitchGemEquipped(player, "2")) {
-               player.getAttribute(Attribute.GENERIC_WATER_MOVEMENT_EFFICIENCY).setBaseValue(1.0);
+               player.getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY).setBaseValue(1.0);
             }
          }, 20L);
       } else if (hasTier1) {

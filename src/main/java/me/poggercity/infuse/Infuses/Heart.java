@@ -169,12 +169,12 @@ public class Heart implements Listener {
       if (!CooldownManager.isOnCooldown(playerUUID, "health")) {
          particles.spawnEffect(player, Color.fromRGB(252, 0, 70));
          particles.spawnHearts(player);
-         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
          if (maxHealthAttribute != null) {
             maxHealthAttribute.setBaseValue(40.0);
          }
 
-         player.setHealth(player.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue());
+         player.setHealth(player.getAttribute(Attribute.MAX_HEALTH).getValue());
          this.activeSpark.add(playerUUID);
          int duration = Infuse.getInstance().getConfig().getInt("durations.heart_spark", 60);
          CooldownManager.setDuration(playerUUID, "health", duration);
@@ -188,7 +188,7 @@ public class Heart implements Listener {
          Location anchor = player.getLocation();
          Bukkit.getRegionScheduler().runDelayed(Infuse.getInstance(), anchor, task -> {
             this.activeSpark.remove(playerUUID);
-            AttributeInstance maxAttr = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+            AttributeInstance maxAttr = player.getAttribute(Attribute.MAX_HEALTH);
             if (maxAttr != null) {
                if (this.hasHeartEffectEquipped(player)) {
                   maxAttr.setBaseValue(30.0);
@@ -215,7 +215,7 @@ public class Heart implements Listener {
       Player player = event.getPlayer();
       Location anchor = player.getLocation();
       Bukkit.getRegionScheduler().runDelayed(Infuse.getInstance(), anchor, task -> {
-         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
          if (maxHealthAttribute != null) {
             maxHealthAttribute.setBaseValue(20.0);
             player.setHealth(20.0);
@@ -228,7 +228,7 @@ public class Heart implements Listener {
    @EventHandler
    public void onPlayerQuit(PlayerQuitEvent event) {
       Player player = event.getPlayer();
-      AttributeInstance max = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+      AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
       if (max != null) {
          max.setBaseValue(20.0);
          if (player.getHealth() > 20.0) {
@@ -245,7 +245,7 @@ public class Heart implements Listener {
       if (event.getFrom().getBlockX() != event.getTo().getBlockX()
          || event.getFrom().getBlockY() != event.getTo().getBlockY()
          || event.getFrom().getBlockZ() != event.getTo().getBlockZ()) {
-         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
          if (maxHealthAttribute == null) {
             return;
          }

@@ -85,14 +85,14 @@ public class Regen implements Listener {
          if (CooldownManager.isEffectActive(damager.getUniqueId(), "regen")) {
             double damage = event.getFinalDamage();
             double healAmount = damage / 2.0;
-            double maxHealth = damager.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue();
+            double maxHealth = damager.getAttribute(Attribute.MAX_HEALTH).getValue();
             damager.setHealth(Math.min(damager.getHealth() + healAmount, maxHealth));
 
             for (Player nearbyPlayer : damager.getWorld().getPlayers()) {
                if (!nearbyPlayer.equals(damager)
                   && nearbyPlayer.getLocation().distance(damager.getLocation()) <= 5.0
                   && Infuse.getInstance().getTrustManager().isTrusted(damager, nearbyPlayer)) {
-                  double allyMaxHealth = nearbyPlayer.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue();
+                  double allyMaxHealth = nearbyPlayer.getAttribute(Attribute.MAX_HEALTH).getValue();
                   nearbyPlayer.setHealth(Math.min(nearbyPlayer.getHealth() + healAmount, allyMaxHealth));
                }
             }
