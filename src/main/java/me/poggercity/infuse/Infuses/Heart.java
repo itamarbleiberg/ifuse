@@ -2,16 +2,16 @@ package me.poggercity.infuse.Infuses;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
+import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -19,23 +19,26 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 public class Heart implements Listener {
+   public static final String KEY = "heart";
    private static final String HEALTH_KEY = "health";
+   private static final double DEFAULT_MAX = 20.0;
+   private static final double SPARK_MAX = 40.0;
    private final Map<UUID, Map<UUID, Integer>> hitCounts = new HashMap<>();
    private final Map<UUID, ArmorStand> healthDisplays = new HashMap<>();
-   private final ConcurrentHashMap<UUID, Double> playerHealthCache = new ConcurrentHashMap<>();
-   private final Set<UUID> activeSpark = ConcurrentHashMap.newKeySet();
+   private NamespacedKey logoutHealthKey;
 
    public static boolean isVirusGlitchGem(ItemStack item) {
       if (item != null && item.getType() == Material.POTION) {
@@ -46,36 +49,78 @@ public class Heart implements Listener {
       }
    }
 
-   private boolean hasHeartEffectEquipped(Player player) {
+   private NamespacedKey logoutHealthKey() {
+      if (this.logoutHealthKey == null) {
+         this.logoutHealthKey = new NamespacedKey(Infuse.getInstance(), "logout_health");
+      }
+
+      return this.logoutHealthKey;
+   }
+
+   public boolean hasHeartEffectEquipped(Player player) {
       String hack1 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "1");
       String hack2 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "2");
-      if (hack1 != null) {
-         String stripped = ChatColor.stripColor(hack1).toLowerCase();
-         if (stripped.contains("heart effect")) {
-            return true;
-         }
+      return hack1 != null && ChatColor.stripColor(hack1).toLowerCase().contains("heart effect")
+         || hack2 != null && ChatColor.stripColor(hack2).toLowerCase().contains("heart effect");
+   }
+
+   /** The base max health this player should have right now. */
+   private double desiredBaseMaxHealth(Player player) {
+      UUID id = player.getUniqueId();
+      double base = DEFAULT_MAX;
+      if (this.hasHeartEffectEquipped(player) && Settings.passive(KEY, "extra_hearts")) {
+         base += Math.max(0.0, Settings.value(KEY, "extra_hearts", "hearts", 5.0)) * 2.0;
       }
 
-      if (hack2 != null) {
-         String stripped = ChatColor.stripColor(hack2).toLowerCase();
-         if (stripped.contains("heart effect")) {
-            return true;
-         }
+      if (CooldownManager.isEffectActive(id, HEALTH_KEY) || CooldownManager.isEffectActive(id, "apophis")) {
+         base = Math.max(base, SPARK_MAX);
       }
 
-      return false;
+      return base;
+   }
+
+   /**
+    * Runs every tick. Sets the base max health from the Heart passive (+5 hearts), the Heart spark and the Apophis spark
+    * (both 20 hearts). This used to run only when a player moved to another block, so standing still kept the extra
+    * hearts after the effect was gone, and it clamped health against the base value, which ignored other bonuses such
+    * as Ocean's water hearts.
+    */
+   public void tickMaxHealth() {
+      for (Player player : Bukkit.getOnlinePlayers()) {
+         this.updateMaxHealth(player);
+      }
+   }
+
+   public void updateMaxHealth(Player player) {
+      if (!player.isDead()) {
+         AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
+         if (max != null) {
+            double desired = this.desiredBaseMaxHealth(player);
+            if (max.getBaseValue() != desired) {
+               max.setBaseValue(desired);
+            }
+
+            if (player.getHealth() > max.getValue()) {
+               player.setHealth(max.getValue());
+            }
+         }
+      }
    }
 
    @EventHandler
    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
-      if (event.getDamager() instanceof Player player && event.getEntity() instanceof LivingEntity target && this.hasHeartEffectEquipped(player)) {
+      if (event.getDamager() instanceof Player player
+         && event.getEntity() instanceof LivingEntity target
+         && this.hasHeartEffectEquipped(player)
+         && Settings.passive(KEY, "health_display")) {
          UUID playerUUID = player.getUniqueId();
          UUID targetUUID = target.getUniqueId();
+         int threshold = Math.max(1, Settings.intValue(KEY, "health_display", "hits", 10));
          this.hitCounts.putIfAbsent(playerUUID, new HashMap<>());
          Map<UUID, Integer> playerHits = this.hitCounts.get(playerUUID);
          int hitCount = playerHits.getOrDefault(targetUUID, 0) + 1;
          playerHits.put(targetUUID, hitCount);
-         if (hitCount == 10) {
+         if (hitCount >= threshold) {
             if (target instanceof Player pTarget) {
                this.showHealthAbovePlayer(pTarget);
                player.playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_PREPARE_MIRROR, 1.0F, 1.0F);
@@ -113,10 +158,11 @@ public class Heart implements Listener {
       }
 
       Location location = player.getLocation().add(0.0, 100.0, 0.0);
-      ArmorStand armorStand = (ArmorStand)player.getWorld().spawn(location, ArmorStand.class);
+      ArmorStand armorStand = player.getWorld().spawn(location, ArmorStand.class);
       armorStand.setInvisible(true);
       armorStand.setMarker(true);
       armorStand.setGravity(false);
+      armorStand.setPersistent(false);
       armorStand.setCustomNameVisible(true);
       armorStand.setCustomName(this.getHealthText(player));
       player.addPassenger(armorStand);
@@ -157,126 +203,72 @@ public class Heart implements Listener {
       if (this.hasHeartEffectEquipped(player)) {
          ItemStack item = event.getItem();
          if (item.getType() == Material.ENCHANTED_GOLDEN_APPLE) {
-            player.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400, 4));
-         } else {
-            player.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 600, 0));
+            if (Settings.passive(KEY, "golden_apple_absorption")) {
+               int level = Math.max(1, Settings.intValue(KEY, "golden_apple_absorption", "level", 5));
+               int seconds = Math.max(1, Settings.intValue(KEY, "golden_apple_absorption", "seconds", 120));
+               player.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, seconds * 20, level - 1));
+            }
+         } else if (Settings.passive(KEY, "food_absorption")) {
+            int level = Math.max(1, Settings.intValue(KEY, "food_absorption", "level", 1));
+            int seconds = Math.max(1, Settings.intValue(KEY, "food_absorption", "seconds", 30));
+            player.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, seconds * 20, level - 1));
          }
       }
    }
 
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
-      if (!CooldownManager.isOnCooldown(playerUUID, "health")) {
-         particles.spawnEffect("heart", player, Color.fromRGB(252, 0, 70));
-         particles.spawnHearts("heart", player);
-         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
-         if (maxHealthAttribute != null) {
-            maxHealthAttribute.setBaseValue(40.0);
-         }
-
-         player.setHealth(player.getAttribute(Attribute.MAX_HEALTH).getValue());
-         this.activeSpark.add(playerUUID);
+      if (!CooldownManager.isOnCooldown(playerUUID, HEALTH_KEY)) {
+         particles.spawnEffect(KEY, player, Color.fromRGB(252, 0, 70));
+         particles.spawnHearts(KEY, player);
          int duration = Infuse.getInstance().getConfig().getInt("durations.heart_spark", 60);
-         CooldownManager.setDuration(playerUUID, "health", duration);
+         CooldownManager.setDuration(playerUUID, HEALTH_KEY, duration);
+         // 20 hearts while the spark lasts; tickMaxHealth takes them away again when it ends.
+         this.updateMaxHealth(player);
+         player.setHealth(player.getAttribute(Attribute.MAX_HEALTH).getValue());
          int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.heart_spark", 120);
          String h1 = Infuse.getInstance().getHackManager().getHack(playerUUID, "1");
          String h2 = Infuse.getInstance().getHackManager().getHack(playerUUID, "2");
          boolean isAugmented = this.hasHeartEffectEquipped(player)
             && (h1 != null && h1.toLowerCase().contains("augmented heart") || h2 != null && h2.toLowerCase().contains("augmented heart"));
          int cooldown = isAugmented ? configcooldown / 2 + duration : configcooldown + duration;
-         CooldownManager.setCooldown(playerUUID, "health", cooldown);
-         Location anchor = player.getLocation();
-         Bukkit.getRegionScheduler().runDelayed(Infuse.getInstance(), anchor, task -> {
-            this.activeSpark.remove(playerUUID);
-            AttributeInstance maxAttr = player.getAttribute(Attribute.MAX_HEALTH);
-            if (maxAttr != null) {
-               if (this.hasHeartEffectEquipped(player)) {
-                  maxAttr.setBaseValue(30.0);
-                  if (player.getHealth() > 30.0) {
-                     player.setHealth(30.0);
-                  }
-
-                  this.playerHealthCache.put(playerUUID, 30.0);
-               } else {
-                  maxAttr.setBaseValue(20.0);
-                  if (player.getHealth() > 20.0) {
-                     player.setHealth(20.0);
-                  }
-
-                  this.playerHealthCache.remove(playerUUID);
-               }
-            }
-         }, duration * 20L);
+         CooldownManager.setCooldown(playerUUID, HEALTH_KEY, cooldown);
       }
    }
 
-   @EventHandler
+   // Joining used to set health to 20 for everyone, so relogging fully healed a player. Health is now kept: it is saved
+   // when the player leaves (before their max health is put back to normal) and restored when they join.
+   @EventHandler(priority = EventPriority.LOWEST)
    public void onPlayerJoin(PlayerJoinEvent event) {
       Player player = event.getPlayer();
-      Location anchor = player.getLocation();
-      Bukkit.getRegionScheduler().runDelayed(Infuse.getInstance(), anchor, task -> {
-         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
-         if (maxHealthAttribute != null) {
-            maxHealthAttribute.setBaseValue(20.0);
-            player.setHealth(20.0);
+      Double saved = player.getPersistentDataContainer().get(this.logoutHealthKey(), PersistentDataType.DOUBLE);
+      player.getPersistentDataContainer().remove(this.logoutHealthKey());
+      this.updateMaxHealth(player);
+      if (saved != null && saved > 0.0 && !player.isDead()) {
+         AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
+         if (max != null) {
+            player.setHealth(Math.min(saved, max.getValue()));
          }
-
-         this.activeSpark.remove(player.getUniqueId());
-      }, 15L);
+      }
    }
 
-   @EventHandler
+   // Max health goes back to 20 in the saved player data, so nothing is left behind if Infuse is removed. The real
+   // health is stored first so it survives the relog.
+   @EventHandler(priority = EventPriority.MONITOR)
    public void onPlayerQuit(PlayerQuitEvent event) {
       Player player = event.getPlayer();
+      if (!player.isDead()) {
+         player.getPersistentDataContainer().set(this.logoutHealthKey(), PersistentDataType.DOUBLE, player.getHealth());
+      }
+
       AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
       if (max != null) {
-         max.setBaseValue(20.0);
-         if (player.getHealth() > 20.0) {
-            player.setHealth(20.0);
+         max.setBaseValue(DEFAULT_MAX);
+         if (player.getHealth() > max.getValue()) {
+            player.setHealth(max.getValue());
          }
       }
 
-      this.activeSpark.remove(player.getUniqueId());
-   }
-
-   @EventHandler
-   public void onPlayerMove(PlayerMoveEvent event) {
-      Player player = event.getPlayer();
-      if (event.getFrom().getBlockX() != event.getTo().getBlockX()
-         || event.getFrom().getBlockY() != event.getTo().getBlockY()
-         || event.getFrom().getBlockZ() != event.getTo().getBlockZ()) {
-         AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
-         if (maxHealthAttribute == null) {
-            return;
-         }
-
-         UUID playerId = player.getUniqueId();
-         boolean hasEffect = this.hasHeartEffectEquipped(player);
-         boolean isSparked = this.activeSpark.contains(playerId);
-         if (!hasEffect && !isSparked) {
-            if (maxHealthAttribute.getBaseValue() != 20.0) {
-               maxHealthAttribute.setBaseValue(20.0);
-               if (player.getHealth() > 20.0) {
-                  player.setHealth(20.0);
-               }
-            }
-
-            this.playerHealthCache.remove(playerId);
-         } else {
-            if (isSparked) {
-               if (maxHealthAttribute.getBaseValue() < 40.0) {
-                  maxHealthAttribute.setBaseValue(40.0);
-               }
-            } else if (maxHealthAttribute.getBaseValue() < 30.0) {
-               maxHealthAttribute.setBaseValue(30.0);
-            }
-
-            if (player.getHealth() > maxHealthAttribute.getBaseValue()) {
-               player.setHealth(maxHealthAttribute.getBaseValue());
-            }
-
-            this.playerHealthCache.put(playerId, maxHealthAttribute.getBaseValue());
-         }
-      }
+      this.removeHealthDisplay(player.getUniqueId());
    }
 }

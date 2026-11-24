@@ -55,14 +55,28 @@ public final class Settings {
       return Math.max(0, cfg().getInt(ROOT + "." + effect + ".particles.aura_amount", 2));
    }
 
+   public static double abilityParticlePercent(String effect) {
+      return Math.max(0.0, cfg().getDouble(ROOT + "." + effect + ".particles.ability_percent", 100.0));
+   }
+
    /** Scales a spark/ability particle count by the effect's ability_percent setting. */
    public static int particles(String effect, int base) {
-      double percent = Math.max(0.0, cfg().getDouble(ROOT + "." + effect + ".particles.ability_percent", 100.0));
+      double percent = abilityParticlePercent(effect);
       if (base <= 0 || percent <= 0.0) {
          return 0;
       } else {
          return Math.max(1, (int)Math.round(base * percent / 100.0));
       }
+   }
+
+   /**
+    * For shapes drawn from many single particles (rings, spirals): the count to spawn at one point. At 100% this is 1,
+    * at 50% it is 0 or 1 at random (half the points), at 200% it is 2.
+    */
+   public static int particlesAt(String effect) {
+      double factor = abilityParticlePercent(effect) / 100.0;
+      int whole = (int)factor;
+      return whole + (Math.random() < factor - whole ? 1 : 0);
    }
 
    // ----- rituals -----

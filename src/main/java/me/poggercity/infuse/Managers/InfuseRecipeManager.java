@@ -58,6 +58,8 @@ import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.NotNull;
 
 public class InfuseRecipeManager implements Listener {
+   /** Scoreboard tag on entities Infuse spawns for ritual beams, so only those are removed on shutdown. */
+   public static final String BEAM_TAG = "infuse_ritual_beam";
    private final JavaPlugin plugin;
    private final File recipeLimitFile;
    private final FileConfiguration recipeLimits;
@@ -1170,6 +1172,9 @@ public class InfuseRecipeManager implements Listener {
          this.plugin.getLogger().severe("Failed to reload recipes: " + var2.getMessage());
          var2.printStackTrace();
       }
+   }
+
+   public void shutdown() {
    }
 
    public void debugRecipes() {

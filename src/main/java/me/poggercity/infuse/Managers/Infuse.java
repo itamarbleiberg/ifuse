@@ -33,6 +33,7 @@ import me.poggercity.infuse.Infuses.Ritual;
 import me.poggercity.infuse.Infuses.Speed;
 import me.poggercity.infuse.Infuses.Strength;
 import me.poggercity.infuse.Infuses.Thunder;
+import me.poggercity.infuse.Infuses.ToolBonuses;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -76,6 +77,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    private Regen regen;
    private Thunder thunder;
    private Apophis apophis;
+   private ToolBonuses toolBonuses;
    private Passive passive;
    private Ritual ritual;
    private TrustManager trustManager;
@@ -565,23 +567,36 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    }
 
    public void onDisable() {
-      instance = null;
       this.getLogger().info("Infuse Plugin is disabling...");
+      if (this.recipeManager != null) {
+         // Saves running rituals so they continue after a restart, and removes their beam entities.
+         this.recipeManager.shutdown();
+      }
 
+      // This used to remove every end crystal in every world (including the End's pillar crystals and crystals
+      // players placed). Only entities spawned by Infuse (tagged) are removed now.
       for (World world : Bukkit.getWorlds()) {
-         List<EnderCrystal> toRemove = new ArrayList<>();
+         for (Entity entity : world.getEntities()) {
+            if (entity.getScoreboardTags().contains(InfuseRecipeManager.BEAM_TAG)) {
+               entity.remove();
+            }
+         }
+      }
 
-         for (Entity entity : world.getEntitiesByClass(EnderCrystal.class)) {
-            toRemove.add((EnderCrystal)entity);
+      for (Player player : Bukkit.getOnlinePlayers()) {
+         if (this.ocean != null) {
+            this.ocean.removeBonuses(player);
          }
 
-         for (EnderCrystal crystal : toRemove) {
-            crystal.remove();
+         if (this.toolBonuses != null) {
+            this.toolBonuses.removeBonuses(player);
          }
       }
 
       this.hackManager.clear();
+      PlayerHackManager.resetShared();
       this.getLogger().info("Infuse Plugin has been disabled!");
+      instance = null;
    }
 
    public PlayerHackManager getHackManager() {
@@ -605,6 +620,11 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       this.regen = new Regen(this);
       this.thunder = new Thunder(this);
       this.apophis = new Apophis(this);
+      this.toolBonuses = new ToolBonuses(this);
+   }
+
+   public ToolBonuses getToolBonuses() {
+      return this.toolBonuses;
    }
 
    public Fire getFire() {
@@ -691,6 +711,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       Bukkit.getPluginManager().registerEvents(this.haste, this);
       Bukkit.getPluginManager().registerEvents(this.speed, this);
       Bukkit.getPluginManager().registerEvents(this.fire, this);
+      Bukkit.getPluginManager().registerEvents(this.toolBonuses, this);
       Bukkit.getPluginManager().registerEvents(this.abilitiesHandler, this);
       Bukkit.getPluginManager().registerEvents(new HackRerollListener(this, new HackEquipListener()), this);
       int startdelay = getInstance().getConfig().getInt("configs.event_update_time", 1);
@@ -731,6 +752,13 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
             this.apophis.applyApophisEffects();
          }
       }, 1L, startdelay);
+      // Attribute bonuses run every tick regardless of event_update_time, so they are removed the moment they stop
+      // applying (for example Ocean's water hearts when leaving water).
+      Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+         this.ocean.tickAttributes();
+         this.toolBonuses.tickAttributes();
+         this.heart.tickMaxHealth();
+      }, 1L, 1L);
    }
 
    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
