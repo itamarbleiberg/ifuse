@@ -31,6 +31,7 @@ public class Effects {
    private static final String THUNDER = HexColorTranslator.translateToMinecraftColor("#FCED00") + "Thunder Effect";
    private static final String DRAGON = HexColorTranslator.translateToMinecraftColor("#541351") + "Ender Effect";
    private static final String APOPHIS = HexColorTranslator.translateToMinecraftColor("#301145") + "Apophis Effect";
+   private static final String GAMBLE = HexColorTranslator.translateToMinecraftColor("#1EE8B6") + Gamble.GEM_NAME;
    private static final String INVIS_COLOR = HexColorTranslator.translateToMinecraftColor("#5800B0");
    private static final String HASTE_COLOR = HexColorTranslator.translateToMinecraftColor("#804B00");
    private static final String REGEN_COLOR = HexColorTranslator.translateToMinecraftColor("#B0009A");
@@ -253,6 +254,21 @@ public class Effects {
          meta.setCustomModelData(12);
          meta.addItemFlags(new ItemFlag[]{ItemFlag.HIDE_ADDITIONAL_TOOLTIP});
          tagEffect(meta, "apophis", "normal");
+         gem.setItemMeta(meta);
+      }
+
+      return gem;
+   }
+
+   public static ItemStack createGAMBLE() {
+      ItemStack gem = new ItemStack(Material.POTION);
+      PotionMeta meta = (PotionMeta)gem.getItemMeta();
+      if (meta != null) {
+         meta.setDisplayName(GAMBLE);
+         meta.setColor(Color.fromRGB(30, 232, 182));
+         meta.setLore(EffectLore.lore("gamble", false));
+         meta.setCustomModelData(Gamble.MODEL_DATA);
+         meta.addItemFlags(new ItemFlag[]{ItemFlag.HIDE_ADDITIONAL_TOOLTIP});
          gem.setItemMeta(meta);
       }
 

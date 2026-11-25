@@ -23,6 +23,7 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
+import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.HexColorTranslator;
@@ -77,6 +78,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    private Regen regen;
    private Thunder thunder;
    private Apophis apophis;
+   private Gamble gamble;
    private ToolBonuses toolBonuses;
    private Passive passive;
    private Ritual ritual;
@@ -128,7 +130,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    }
 
    public static final String[] EFFECT_KEYS = new String[]{
-      "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis"
+      "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis", "gamble"
    };
 
 
@@ -281,9 +283,9 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    @EventHandler
    public void onJoin(PlayerJoinEvent event) {
       Player player = event.getPlayer();
-      boolean randomEffectOnJoin = getInstance().getConfig().getBoolean("general.random_effect_on_first_join", false);
-      boolean randomPrimaryOnJoin = getInstance().getConfig().getBoolean("general.random_primary_effect_on_first_join", false);
-      boolean randomSecondaryOnJoin = getInstance().getConfig().getBoolean("general.random_secondary_effect_on_first_join", false);
+      boolean randomEffectOnJoin = getInstance().getConfig().getBoolean("starting_effects.random_effect_on_first_join", false);
+      boolean randomPrimaryOnJoin = getInstance().getConfig().getBoolean("starting_effects.random_primary_effect_on_first_join", false);
+      boolean randomSecondaryOnJoin = getInstance().getConfig().getBoolean("starting_effects.random_secondary_effect_on_first_join", false);
       Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> {
          if (!player.hasPlayedBefore()) {
             if (randomEffectOnJoin) {
@@ -297,75 +299,44 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       }, 10L);
    }
 
-   public void roll(Player player) {
-      UUID uuid = player.getUniqueId();
-      boolean allowEnder = this.getConfig().getBoolean("general.random_effect_can_be_ender", true);
-      boolean allowApophis = this.getConfig().getBoolean("general.random_effect_can_be_apophis", true);
-      List<HackMapping> allHacks = Arrays.stream(HackMapping.values()).filter(hack -> {
-         String n = hack.getHackName().toLowerCase();
-         if (n.contains("augmented")) {
-            return false;
-         } else {
-            return !allowEnder && n.contains("ender") ? false : allowApophis || !n.contains("apophis");
+   /**
+    * The effects a new player can get at random: the normal (not augmented) effects that starting_effects allows, and
+    * only primary or only secondary ones if asked.
+    */
+   private List<HackMapping> startingPool(String kind) {
+      List<HackMapping> pool = new ArrayList<>();
+
+      for (HackMapping hack : HackMapping.values()) {
+         String name = hack.getHackName();
+         String key = EffectKeys.keyOf(name);
+         if (key != null && !name.toLowerCase().startsWith("augmented") && Settings.startingAllowed(key)
+            && (kind == null || kind.equals("primary") && EffectKeys.isPrimary(key) || kind.equals("secondary") && EffectKeys.isSecondary(key))) {
+            pool.add(hack);
          }
-      }).toList();
-      if (allHacks.isEmpty()) {
-         Bukkit.getRegionScheduler().execute(this, player.getLocation(), () -> player.sendMessage(ChatColor.RED + "No available effects to roll."));
-      } else {
-         HackMapping finalMapping = allHacks.get(new Random().nextInt(allHacks.size()));
-         this.startRollingActionBarAnimation(player, allHacks, finalMapping, 0);
       }
+
+      return pool;
+   }
+
+   private void rollFrom(Player player, List<HackMapping> pool, String what) {
+      if (pool.isEmpty()) {
+         Bukkit.getRegionScheduler().execute(this, player.getLocation(), () -> player.sendMessage(ChatColor.RED + "No available " + what + " to roll."));
+      } else {
+         HackMapping finalMapping = pool.get(new Random().nextInt(pool.size()));
+         this.startRollingActionBarAnimation(player, pool, finalMapping, 0);
+      }
+   }
+
+   public void roll(Player player) {
+      this.rollFrom(player, this.startingPool(null), "effects");
    }
 
    public void rollPrimary(Player player) {
-      UUID uuid = player.getUniqueId();
-      boolean allowEnder = this.getConfig().getBoolean("general.random_effect_can_be_ender", true);
-      boolean allowApophis = this.getConfig().getBoolean("general.random_effect_can_be_apophis", true);
-      List<HackMapping> primaryHacks = Arrays.stream(HackMapping.values())
-         .filter(
-            hack -> {
-               String n = hack.getHackName().toLowerCase();
-               if (n.contains("augmented")) {
-                  return false;
-               } else if (!allowEnder && n.contains("ender")) {
-                  return false;
-               } else {
-                  return !allowApophis && n.contains("apophis")
-                     ? false
-                     : n.contains("invis")
-                        || n.contains("haste")
-                        || n.contains("regen")
-                        || n.contains("apophis")
-                        || n.contains("ender")
-                        || n.contains("feather")
-                        || n.contains("thunder")
-                        || n.contains("strength")
-                        || n.contains("frost")
-                        || n.contains("heart");
-               }
-            }
-         )
-         .toList();
-      if (primaryHacks.isEmpty()) {
-         Bukkit.getRegionScheduler().execute(this, player.getLocation(), () -> player.sendMessage(ChatColor.RED + "No available primary effects to roll."));
-      } else {
-         HackMapping finalMapping = primaryHacks.get(new Random().nextInt(primaryHacks.size()));
-         this.startRollingActionBarAnimation(player, primaryHacks, finalMapping, 0);
-      }
+      this.rollFrom(player, this.startingPool("primary"), "primary effects");
    }
 
    public void rollSecondary(Player player) {
-      UUID uuid = player.getUniqueId();
-      List<HackMapping> secondaryHacks = Arrays.stream(HackMapping.values()).filter(hack -> {
-         String n = hack.getHackName().toLowerCase();
-         return n.contains("augmented") ? false : n.contains("ocean") || n.contains("emerald") || n.contains("fire") || n.contains("speed");
-      }).toList();
-      if (secondaryHacks.isEmpty()) {
-         Bukkit.getRegionScheduler().execute(this, player.getLocation(), () -> player.sendMessage(ChatColor.RED + "No available secondary effects to roll."));
-      } else {
-         HackMapping finalMapping = secondaryHacks.get(new Random().nextInt(secondaryHacks.size()));
-         this.startRollingActionBarAnimation(player, secondaryHacks, finalMapping, 0);
-      }
+      this.rollFrom(player, this.startingPool("secondary"), "secondary effects");
    }
 
    private void startRollingActionBarAnimation(Player player, List<HackMapping> cycle, HackMapping finalMapping, int index) {
@@ -430,6 +401,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
          return "\ue013";
       } else if (name.contains("Ender")) {
          return "\ue100";
+      } else if (name.contains("Gamble")) {
+         return EffectKeys.icon("gamble");
       } else {
          return name.contains("Apophis") ? "\ue055" : "\ue002";
       }
@@ -509,6 +482,9 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       this.getLogger().info("Infuse Plugin is disabling...");
       // The recipe editor's grid only holds copies; it must not stay open without its listener.
       RecipeEditor.closeAll();
+      if (this.gamble != null) {
+         this.gamble.shutdown();
+      }
       if (this.recipeManager != null) {
          // Saves running rituals so they continue after a restart, and removes their beam entities.
          this.recipeManager.shutdown();
@@ -565,6 +541,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       this.regen = new Regen(this);
       this.thunder = new Thunder(this);
       this.apophis = new Apophis(this);
+      this.gamble = new Gamble(this);
       this.toolBonuses = new ToolBonuses(this);
    }
 
@@ -628,6 +605,10 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       return this.apophis;
    }
 
+   public Gamble getGamble() {
+      return this.gamble;
+   }
+
    public boolean isApophisEnabled() {
       return this.getConfig().getBoolean("general.apophis_enabled", true);
    }
@@ -655,6 +636,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       Bukkit.getPluginManager().registerEvents(this.speed, this);
       Bukkit.getPluginManager().registerEvents(this.fire, this);
       Bukkit.getPluginManager().registerEvents(this.toolBonuses, this);
+      Bukkit.getPluginManager().registerEvents(this.gamble, this);
+      this.gamble.start();
       Bukkit.getPluginManager().registerEvents(this.abilitiesHandler, this);
       Bukkit.getPluginManager().registerEvents(new HackRerollListener(this, new HackEquipListener()), this);
       // Runs every tick and does the work every general.passive_update_ticks ticks, so changing that setting applies

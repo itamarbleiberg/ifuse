@@ -54,6 +54,8 @@ public class Passive {
                }
             } else if (hack.contains("apophis")) {
                this.spawn("apophis", player, Color.fromRGB(48, 17, 69), isAugmented);
+            } else if (hack.contains("gamble")) {
+               this.spawn("gamble", player, Color.fromRGB(30, 232, 182), isAugmented);
             }
          }
       }

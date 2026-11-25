@@ -535,6 +535,10 @@ public class InfuseRecipeManager implements Listener {
          if (strippedName.contains("augmented feather")) {
             return BarColor.WHITE;
          }
+
+         if (strippedName.contains("augmented gamble")) {
+            return BarColor.GREEN;
+         }
       }
 
       return BarColor.WHITE;
@@ -927,11 +931,7 @@ public class InfuseRecipeManager implements Listener {
    }
 
    private void addMissingHardcodedRecipes() {
-      String[] expectedRecipes = new String[]{
-         "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis"
-      };
-
-      for (String key : expectedRecipes) {
+      for (String key : Infuse.EFFECT_KEYS) {
          if (!this.firstTimeRewards.containsKey(key)) {
             this.plugin.getLogger().info("Adding hardcoded fallback recipe for: " + key);
             this.addHardcodedRecipe(key);
@@ -983,6 +983,32 @@ public class InfuseRecipeManager implements Listener {
             break;
          case "thunder":
             this.Thunder();
+            break;
+         case "gamble":
+            this.Gamble();
+      }
+   }
+
+   private void Gamble() {
+      if (!this.firstTimeRewards.containsKey("gamble")) {
+         ItemStack firstTime = Augmented.createGAMBLE();
+         ItemStack standard = Effects.createGAMBLE();
+         this.firstTimeRewards.put("gamble", firstTime);
+         this.standardResults.put("gamble", standard);
+         NamespacedKey key = new NamespacedKey(this.plugin, "gamble");
+         ShapedRecipe recipe = new ShapedRecipe(key, standard);
+         recipe.shape(new String[]{"VGV", "ERE", "VGV"});
+         recipe.setIngredient('V', Material.VEX_ARMOR_TRIM_SMITHING_TEMPLATE);
+         recipe.setIngredient('G', Material.GOLD_BLOCK);
+         recipe.setIngredient('E', Material.EMERALD_BLOCK);
+         recipe.setIngredient('R', Material.MUSIC_DISC_RELIC);
+
+         try {
+            Bukkit.addRecipe(recipe);
+            this.registeredRecipes.add(key);
+         } catch (Exception ex) {
+            this.plugin.getLogger().warning("Failed to add Gamble recipe: " + ex.getMessage());
+         }
       }
    }
 
@@ -1040,6 +1066,8 @@ public class InfuseRecipeManager implements Listener {
             return Effects.createDRAGON();
          case "apophis":
             return Augmented.createAPOPHIS();
+         case "gamble":
+            return Augmented.createGAMBLE();
          default:
             return null;
       }
@@ -1076,6 +1104,8 @@ public class InfuseRecipeManager implements Listener {
             return Effects.createDRAGON();
          case "apophis":
             return Effects.createAPOPHIS();
+         case "gamble":
+            return Effects.createGAMBLE();
          default:
             return null;
       }

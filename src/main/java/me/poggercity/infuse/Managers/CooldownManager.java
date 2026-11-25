@@ -70,6 +70,23 @@ public class CooldownManager {
       }
    }
 
+   /** When a cooldown ends (epoch ms), or 0 if there is none. Used with restoreCooldown to put a cooldown back. */
+   public static long getCooldownEnd(UUID playerUUID, String key) {
+      Map<String, Long> playerCooldowns = cooldowns.get(playerUUID);
+      Long end = playerCooldowns == null ? null : playerCooldowns.get(key);
+      return end == null ? 0L : end;
+   }
+
+   /** Puts back a cooldown read with getCooldownEnd / getCachedDuration (an end in the past removes it). */
+   public static void restoreCooldown(UUID playerUUID, String key, long end, long seconds) {
+      if (end <= System.currentTimeMillis()) {
+         clearSpecificCooldown(playerUUID, key);
+      } else {
+         cooldowns.computeIfAbsent(playerUUID, k -> new ConcurrentHashMap<>()).put(key, end);
+         cooldownDurations.computeIfAbsent(playerUUID, k -> new ConcurrentHashMap<>()).put(key, seconds);
+      }
+   }
+
    public static void clearSpecificCooldown(UUID playerUUID, String key) {
       Map<String, Long> playerCooldowns = cooldowns.get(playerUUID);
       if (playerCooldowns != null) {

@@ -111,7 +111,8 @@ public class Speed implements Listener {
 
    private boolean hasSpeed(Player player, String tier) {
       String currentHack = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), tier);
-      return currentHack == null ? false : currentHack.equalsIgnoreCase(ChatColor.stripColor("Speed Effect")) || currentHack.equals("Augmented Speed Effect");
+      return currentHack != null && (currentHack.equalsIgnoreCase(ChatColor.stripColor("Speed Effect")) || currentHack.equals("Augmented Speed Effect"))
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    public void activateSpark(Player player) {

@@ -61,7 +61,8 @@ public class Heart implements Listener {
       String hack1 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "1");
       String hack2 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "2");
       return hack1 != null && ChatColor.stripColor(hack1).toLowerCase().contains("heart effect")
-         || hack2 != null && ChatColor.stripColor(hack2).toLowerCase().contains("heart effect");
+         || hack2 != null && ChatColor.stripColor(hack2).toLowerCase().contains("heart effect")
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    /** The base max health this player should have right now. */

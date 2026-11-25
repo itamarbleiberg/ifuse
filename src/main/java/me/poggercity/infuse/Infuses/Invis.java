@@ -103,7 +103,8 @@ public class Invis implements Listener {
       String hack1 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "1");
       String hack2 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "2");
       return hack1 != null && (hack1.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack1.equals("Augmented Invis Effect"))
-         || hack2 != null && (hack2.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack2.equals("Augmented Invis Effect"));
+         || hack2 != null && (hack2.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack2.equals("Augmented Invis Effect"))
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    @EventHandler

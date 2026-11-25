@@ -32,6 +32,7 @@ import org.bukkit.entity.Trident;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
@@ -52,14 +53,12 @@ public class Ocean implements Listener {
    private final Map<UUID, ScheduledTask> airRegenTasks = new HashMap<>();
    private final Map<UUID, ScheduledTask> upgradeTasks = new HashMap<>();
    private final Map<UUID, Long> lastUseTime = new HashMap<>();
-   private final NamespacedKey waterHealthKey;
-   private final NamespacedKey waterSpeedKey;
    private final NamespacedKey swimKey;
+   // Hits on players since the last Mining Fatigue, per Ocean player.
+   private final Map<UUID, Integer> fatigueHits = new HashMap<>();
 
    public Ocean(Plugin plugin) {
       this.plugin = plugin;
-      this.waterHealthKey = new NamespacedKey(plugin, "ocean_water_health");
-      this.waterSpeedKey = new NamespacedKey(plugin, "ocean_water_speed");
       this.swimKey = new NamespacedKey(plugin, "ocean_swim");
    }
 
@@ -71,39 +70,48 @@ public class Ocean implements Listener {
          .anyMatch(w -> w.equalsIgnoreCase(player.getWorld().getName()));
    }
 
-   /**
-    * Runs every tick. While an Ocean player is in water they get +extra_hearts max health (a keyed transient modifier)
-    * and Regeneration. Both are removed the same tick the player is no longer in water, no longer has Ocean, dies, is
-    * in a disabled world or the passive is turned off. Nothing is healed when the hearts are added, so jumping in and
-    * out of water can't be used to heal.
-    */
+   /** Runs every tick: "swim faster" (same as Depth Strider III) while Ocean is equipped. */
    public void tickAttributes() {
-      boolean bonusEnabled = Settings.passive(KEY, "water_bonus");
       boolean swimEnabled = Settings.passive(KEY, "swim_faster");
-      double extraHealth = Math.max(0.0, Settings.value(KEY, "water_bonus", "extra_hearts", 2.0)) * 2.0;
-      int regenLevel = Math.min(5, Settings.intValue(KEY, "water_bonus", "regeneration_level", 1));
 
       for (Player p : Bukkit.getOnlinePlayers()) {
          boolean ocean = !p.isDead() && this.hasOceanEquipped(p) && !worldDisabled(p);
-         boolean inWater = ocean && bonusEnabled && p.isInWater();
-         AttributeBonus.set(p, Attribute.MAX_HEALTH, this.waterHealthKey, inWater ? extraHealth : 0.0, Operation.ADD_NUMBER);
-         // 2.5 gave Speed in water with this modifier. It isn't used any more; this only clears it from players who
-         // still had it when the plugin was swapped without a restart.
-         AttributeBonus.remove(p, Attribute.MOVEMENT_SPEED, this.waterSpeedKey);
-         // "Swim faster": same as Depth Strider III while Ocean is equipped.
          AttributeBonus.set(p, Attribute.WATER_MOVEMENT_EFFICIENCY, this.swimKey, ocean && swimEnabled ? 1.0 : 0.0, Operation.ADD_NUMBER);
-         this.waterRegen.tick(p, inWater && regenLevel > 0, regenLevel - 1);
       }
    }
 
-   // Regeneration while in water (see ManagedRegen: it really heals, and only Ocean's own effect is ever removed).
-   private final ManagedRegen waterRegen = new ManagedRegen();
-
    public void removeBonuses(Player p) {
-      AttributeBonus.remove(p, Attribute.MAX_HEALTH, this.waterHealthKey);
-      AttributeBonus.remove(p, Attribute.MOVEMENT_SPEED, this.waterSpeedKey);
       AttributeBonus.remove(p, Attribute.WATER_MOVEMENT_EFFICIENCY, this.swimKey);
-      this.waterRegen.remove(p);
+   }
+
+   // Every few hits on a player (mining_fatigue_on_hit: hits) that player gets Mining Fatigue. Counted per attacker,
+   // over all the players they hit; trusted players are never affected and don't count.
+   @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+   public void onHitPlayer(EntityDamageByEntityEvent event) {
+      if (event.getDamager() instanceof Player attacker
+         && event.getEntity() instanceof Player target
+         && !attacker.equals(target)
+         && Settings.passive(KEY, "mining_fatigue_on_hit")
+         && this.hasOceanEquipped(attacker)
+         && !worldDisabled(attacker)
+         && !Infuse.getInstance().getTrustManager().isTrusted(attacker, target)) {
+         UUID id = attacker.getUniqueId();
+         int hits = this.fatigueHits.getOrDefault(id, 0) + 1;
+         if (hits >= Math.max(1, Settings.intValue(KEY, "mining_fatigue_on_hit", "hits", 10))) {
+            int level = Math.max(1, Math.min(255, Settings.intValue(KEY, "mining_fatigue_on_hit", "level", 2)));
+            int ticks = (int)Math.round(Math.max(0.05, Settings.value(KEY, "mining_fatigue_on_hit", "seconds", 3.0)) * 20.0);
+            target.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, ticks, level - 1));
+            target.getWorld().playSound(target.getLocation(), Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.4F, 1.4F);
+            int bubbles = Settings.particles(KEY, 15);
+            if (bubbles > 0) {
+               target.getWorld().spawnParticle(Particle.BUBBLE_POP, target.getLocation().add(0.0, 1.0, 0.0), bubbles, 0.3, 0.5, 0.3, 0.05);
+            }
+
+            hits = 0;
+         }
+
+         this.fatigueHits.put(id, hits);
+      }
    }
 
    @EventHandler(priority = EventPriority.MONITOR)
@@ -112,6 +120,7 @@ public class Ocean implements Listener {
       UUID id = event.getPlayer().getUniqueId();
       this.customAirMap.remove(id);
       this.lastDrownDamageTime.remove(id);
+      this.fatigueHits.remove(id);
    }
 
    @EventHandler(priority = EventPriority.MONITOR)
@@ -292,7 +301,8 @@ public class Ocean implements Listener {
       String hack1 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "1");
       String hack2 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "2");
       return hack1 != null && (hack1.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack1.equals("Augmented Ocean Effect"))
-         || hack2 != null && (hack2.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack2.equals("Augmented Ocean Effect"));
+         || hack2 != null && (hack2.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack2.equals("Augmented Ocean Effect"))
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    @EventHandler

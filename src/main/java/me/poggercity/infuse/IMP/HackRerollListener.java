@@ -1,7 +1,9 @@
 package me.poggercity.infuse.IMP;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import me.poggercity.infuse.Infuses.Apophis;
 import me.poggercity.infuse.Infuses.Augmented;
@@ -11,6 +13,7 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
+import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -20,6 +23,8 @@ import me.poggercity.infuse.Infuses.Speed;
 import me.poggercity.infuse.Infuses.Strength;
 import me.poggercity.infuse.Infuses.Thunder;
 import me.poggercity.infuse.Managers.CooldownManager;
+import me.poggercity.infuse.Managers.EffectKeys;
+import me.poggercity.infuse.Managers.Settings;
 import me.poggercity.infuse.Managers.PlayerHackManager;
 import org.bukkit.Bukkit;
 import org.bukkit.persistence.PersistentDataType;
@@ -75,6 +80,53 @@ public class HackRerollListener implements Listener, CommandExecutor {
       }
    }
 
+   /** The order effects are shown in the menus. */
+   public static final List<String> MENU_ORDER = List.of(
+      "strength", "speed", "regen", "ender", "invis", "heart", "haste", "frost", "fire", "feather", "emerald", "thunder", "apophis", "ocean", "gamble"
+   );
+   // Three rows of five in the middle of a 54-slot menu.
+   private static final int[][] ROWS = new int[][]{{11, 12, 13, 14, 15}, {20, 21, 22, 23, 24}, {29, 30, 31, 32, 33}};
+
+   /** The effect item for a key; Ender has no augmented version, so its normal item is used for both menus. */
+   public static ItemStack effectItem(String key, boolean augmented) {
+      String name = EffectKeys.title(key) + " Effect";
+      HackMapping mapping = augmented ? HackMapping.fromHackName("Augmented " + name) : null;
+      if (mapping == null) {
+         mapping = HackMapping.fromHackName(name);
+      }
+
+      return mapping == null ? null : mapping.createItem();
+   }
+
+   /** The effects players can pick with the selector (starting_effects in config.yml). */
+   private static List<ItemStack> startingItems(boolean augmented) {
+      List<ItemStack> items = new ArrayList<>();
+
+      for (String key : MENU_ORDER) {
+         ItemStack item = Settings.startingAllowed(key) ? effectItem(key, augmented) : null;
+         if (item != null) {
+            items.add(item);
+         }
+      }
+
+      return items;
+   }
+
+   /** Puts effect items in rows of five; a shorter last row is centered. */
+   public static void placeEffects(Inventory gui, List<ItemStack> items) {
+      for (int i = 0; i < items.size() && i < 15; i++) {
+         int row = i / 5;
+         int inRow = Math.min(5, items.size() - row * 5);
+         int offset = (5 - inRow) / 2;
+         gui.setItem(ROWS[row][offset + i % 5], items.get(i));
+      }
+   }
+
+   private static String effectKeyOf(ItemStack item) {
+      ItemMeta meta = item == null ? null : item.getItemMeta();
+      return meta != null && meta.hasDisplayName() ? EffectKeys.keyOf(meta.getDisplayName()) : null;
+   }
+
    private boolean hasPendingPick(Player player) {
       return player.getPersistentDataContainer().has(this.pendingKey(), PersistentDataType.BYTE);
    }
@@ -128,20 +180,12 @@ public class HackRerollListener implements Listener, CommandExecutor {
       return this.nameIs(item, "Augmented Ender Effect");
    }
 
-   private ItemStack getAugmentedEnderSafe() {
-      try {
-         Method m = Augmented.class.getDeclaredMethod("createENDER");
-         Object r = m.invoke(null);
-         if (r instanceof ItemStack) {
-            return (ItemStack)r;
-         }
-      } catch (Throwable var3) {
+   public void openInfuses(Player player) {
+      if (startingItems(false).isEmpty()) {
+         player.sendMessage(ChatColor.RED + "No effects can be chosen right now (starting_effects in config.yml).");
+         return;
       }
 
-      return Effects.createDRAGON();
-   }
-
-   public void openInfuses(Player player) {
       Inventory gui = Bukkit.createInventory((InventoryHolder)null, 54, ChatColor.BOLD + "Choose your Effect");
       ItemStack magentaPane = new ItemStack(Material.MAGENTA_STAINED_GLASS_PANE);
       ItemMeta magentaMeta = magentaPane.getItemMeta();
@@ -167,26 +211,7 @@ public class HackRerollListener implements Listener, CommandExecutor {
          gui.setItem(slot, orangePane);
       }
 
-      int[] var21 = new int[]{11, 12, 13, 14, 15, 21, 22, 23, 39, 40, 41, 49, 31};
-      ItemStack[] effects = new ItemStack[]{
-         Effects.createST(),
-         Effects.createSPEED(),
-         Effects.createREGEN(),
-         Effects.createDRAGON(),
-         Effects.createINVIS(),
-         Effects.createHEART(),
-         Effects.createHASTE(),
-         Effects.createFROST(),
-         Effects.createFIRE(),
-         Effects.createFEATHER(),
-         Effects.createEME(),
-         Effects.createTHUNDER(),
-         Effects.createAPOPHIS()
-      };
-
-      for (int var19 = 0; var19 < var21.length; var19++) {
-         gui.setItem(var21[var19], effects[var19]);
-      }
+      placeEffects(gui, startingItems(false));
 
       for (int var20 = 0; var20 < gui.getSize(); var20++) {
          if (gui.getItem(var20) == null) {
@@ -198,6 +223,11 @@ public class HackRerollListener implements Listener, CommandExecutor {
    }
 
    public void openAugmentedInfuses(Player player) {
+      if (startingItems(true).isEmpty()) {
+         player.sendMessage(ChatColor.RED + "No effects can be chosen right now (starting_effects in config.yml).");
+         return;
+      }
+
       Inventory gui = Bukkit.createInventory((InventoryHolder)null, 54, ChatColor.BOLD + "Choose your Augmented Effect");
       ItemStack magentaPane = new ItemStack(Material.MAGENTA_STAINED_GLASS_PANE);
       ItemMeta magentaMeta = magentaPane.getItemMeta();
@@ -223,26 +253,7 @@ public class HackRerollListener implements Listener, CommandExecutor {
          gui.setItem(slot, orangePane);
       }
 
-      int[] var21 = new int[]{11, 12, 13, 14, 15, 21, 22, 23, 39, 40, 41, 49, 31};
-      ItemStack[] effects = new ItemStack[]{
-         Augmented.createST(),
-         Augmented.createSPEED(),
-         Augmented.createREGEN(),
-         this.getAugmentedEnderSafe(),
-         Augmented.createINVIS(),
-         Augmented.createHEART(),
-         Augmented.createHASTE(),
-         Augmented.createFROST(),
-         Augmented.createFIRE(),
-         Augmented.createFEATHER(),
-         Augmented.createEME(),
-         Augmented.createTHUNDER(),
-         Augmented.createAPOPHIS()
-      };
-
-      for (int var19 = 0; var19 < var21.length; var19++) {
-         gui.setItem(var21[var19], effects[var19]);
-      }
+      placeEffects(gui, startingItems(true));
 
       for (int var20 = 0; var20 < gui.getSize(); var20++) {
          if (gui.getItem(var20) == null) {
@@ -308,6 +319,13 @@ public class HackRerollListener implements Listener, CommandExecutor {
                      return;
                   }
 
+                  String pickedKey = effectKeyOf(clickedItem);
+                  if (pickedKey == null || !Settings.startingAllowed(pickedKey)) {
+                     player.closeInventory();
+                     player.sendMessage(ChatColor.RED + "That effect can't be chosen right now.");
+                     return;
+                  }
+
                   hand.setAmount(hand.getAmount() - 1);
                   player.getPersistentDataContainer().set(this.pendingKey(), PersistentDataType.BYTE, (byte)1);
 
@@ -337,6 +355,8 @@ public class HackRerollListener implements Listener, CommandExecutor {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Thunder Effect");
                   } else if (Apophis.isApophisGem(clickedItem) || this.nameIs(clickedItem, "Apophis Effect")) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Apophis Effect");
+                  } else if (Gamble.isGambleGem(clickedItem)) {
+                     this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.GEM_NAME);
                   } else if (this.isEnder(clickedItem)) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Ender Effect");
                   }
@@ -373,6 +393,12 @@ public class HackRerollListener implements Listener, CommandExecutor {
                      return;
                   }
 
+                  String pickedKey = effectKeyOf(clickedItem);
+                  if (pickedKey == null || !Settings.startingAllowed(pickedKey)) {
+                     player.sendMessage(ChatColor.RED + "That effect can't be chosen right now.");
+                     return;
+                  }
+
                   player.getPersistentDataContainer().remove(this.pendingKey());
                   if (Augmented.ISFROST(clickedItem)) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Frost Effect");
@@ -402,6 +428,8 @@ public class HackRerollListener implements Listener, CommandExecutor {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Ender Effect");
                   } else if (Augmented.ISAPOPHIS(clickedItem) || this.nameIs(clickedItem, "Augmented Apophis Effect")) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Apophis Effect");
+                  } else if (Augmented.ISGAMBLE(clickedItem)) {
+                     this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.AUGMENTED_NAME);
                   } else if (this.isEnder(clickedItem)) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Ender Effect");
                   }

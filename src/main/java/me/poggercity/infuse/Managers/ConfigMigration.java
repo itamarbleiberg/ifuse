@@ -18,12 +18,12 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Converts config.yml from Infuse 2.4 and 2.5 to the current layout (config_version 3), where everything about an
+ * Converts config.yml from Infuse 2.4, 2.5 and 2.6 to the current layout (config_version 4), where everything about an
  * effect is in one section. The old file is kept as a backup. The new file is the commented template from the jar
  * with the server's values filled in, so the comments explaining every setting are there after the update too.
  */
 public final class ConfigMigration {
-   public static final int VERSION = 3;
+   public static final int VERSION = 4;
    public static final String[] EFFECTS = Infuse.EFFECT_KEYS;
    private static final String[] RADIUS_EFFECTS = new String[]{"fire", "invis", "ocean", "thunder", "feather", "frost", "apophis"};
    // Keys that never did anything (not read by any code); dropped without a warning. Invis never had aura particles
@@ -34,6 +34,11 @@ public final class ConfigMigration {
       "damage.apophis_area_duration",
       "effect_settings.invis.particles.aura_enabled",
       "effect_settings.invis.particles.aura_amount"
+   );
+   // Settings that were removed on purpose: logged with the reason instead of as a lost setting.
+   private static final Map<String, String> REMOVED = Map.of(
+      "effects.ocean.passives.water_bonus", "Ocean's water bonus (extra hearts and Regeneration in water) was replaced by mining_fatigue_on_hit",
+      "effect_settings.ocean.passives.water_bonus", "Ocean's water bonus (extra hearts and Speed in water) was replaced by mining_fatigue_on_hit"
    );
    /** True while config.yml can't be read (a YAML error). Nothing is converted or saved over it then. */
    private static boolean broken;
@@ -51,11 +56,17 @@ public final class ConfigMigration {
       m.put("configs.only_allow_one_primary", "general.only_one_primary_effect");
       m.put("configs.drop_effects_on_death", "general.drop_effects_on_death");
       m.put("configs.default_offhand_for_ability", "general.sparks_on_swap_hands_key");
-      m.put("configs.random_effect_on_join", "general.random_effect_on_first_join");
-      m.put("configs.random_primary_effect_on_join", "general.random_primary_effect_on_first_join");
-      m.put("configs.random_secondary_effect_on_join", "general.random_secondary_effect_on_first_join");
-      m.put("configs.roll_enable_ender", "general.random_effect_can_be_ender");
-      m.put("configs.roll_enable_apophis", "general.random_effect_can_be_apophis");
+      m.put("configs.random_effect_on_join", "starting_effects.random_effect_on_first_join");
+      m.put("configs.random_primary_effect_on_join", "starting_effects.random_primary_effect_on_first_join");
+      m.put("configs.random_secondary_effect_on_join", "starting_effects.random_secondary_effect_on_first_join");
+      m.put("configs.roll_enable_ender", "starting_effects.ender");
+      m.put("configs.roll_enable_apophis", "starting_effects.apophis");
+      // 2.6 (config_version 3) had the first-join settings in "general"
+      m.put("general.random_effect_on_first_join", "starting_effects.random_effect_on_first_join");
+      m.put("general.random_primary_effect_on_first_join", "starting_effects.random_primary_effect_on_first_join");
+      m.put("general.random_secondary_effect_on_first_join", "starting_effects.random_secondary_effect_on_first_join");
+      m.put("general.random_effect_can_be_ender", "starting_effects.ender");
+      m.put("general.random_effect_can_be_apophis", "starting_effects.apophis");
       m.put("configs.action_bar_update_time", "general.action_bar_update_ticks");
       m.put("configs.event_update_time", "general.passive_update_ticks");
       m.put("configs.brewing_beam", "rituals.beam");
@@ -183,7 +194,8 @@ public final class ConfigMigration {
          return fillMissing(plugin, file, old);
       }
 
-      String from = old.contains("effect_settings", true) ? "2.5" : "2.4";
+      int version = old.getInt("config_version", 0);
+      String from = version == 3 ? "2.6" : old.contains("effect_settings", true) ? "2.5" : "2.4";
       YamlConfiguration fresh = template(plugin);
       Set<String> used = new HashSet<>();
 
@@ -236,7 +248,18 @@ public final class ConfigMigration {
          }
       }
 
-      // 5) 2.5 passives keep their names. Ocean's Speed in water was removed (it gives Regeneration now).
+      // The old "random effect can be Ender/Apophis" switches became starting_effects.ender/apophis, which also decide
+      // what the effect selector offers. Said in the log, so the selector change isn't a surprise.
+      for (String e : new String[]{"ender", "apophis"}) {
+         String oldKey = isSet(old, "general.random_effect_can_be_" + e) ? "general.random_effect_can_be_" + e
+            : isSet(old, "configs.roll_enable_" + e) ? "configs.roll_enable_" + e : null;
+         if (oldKey != null && !fresh.getBoolean("starting_effects." + e, true)) {
+            plugin.getLogger().info("[config] starting_effects." + e + " is false (from " + oldKey + "), so the effect selector doesn't offer "
+               + EffectKeys.title(e) + " either now. Set it to true to offer it there.");
+         }
+      }
+
+      // 5) 2.5 passives keep their names. Ocean's water bonus was removed.
       for (String e : EFFECTS) {
          ConfigurationSection passives = old.getConfigurationSection("effect_settings." + e + ".passives");
          if (passives != null) {
@@ -247,7 +270,7 @@ public final class ConfigMigration {
                   used.add(oldPath);
                   if (fresh.contains(newPath)) {
                      fresh.set(newPath, passives.get(key));
-                  } else {
+                  } else if (removedReason(oldPath) == null) {
                      plugin.getLogger().info("[config] '" + oldPath + "' no longer exists and was not carried over");
                   }
                }
@@ -298,11 +321,17 @@ public final class ConfigMigration {
 
       // Anything else in the old file is reported so nothing disappears silently (the backup still has it).
       List<String> dropped = new ArrayList<>();
+      Set<String> reasons = new java.util.LinkedHashSet<>();
 
       for (String path : old.getKeys(true)) {
-         if (!old.isConfigurationSection(path) && !used.contains(path) && !DEAD_KEYS.contains(path) && !path.equals("config_version")
+         if (!old.isConfigurationSection(path) && !DEAD_KEYS.contains(path) && !path.equals("config_version")
             && !path.matches("recipes\\.[a-z]+\\.key") && !path.equals("apophis.key")) {
-            dropped.add(path);
+            String reason = removedReason(path);
+            if (reason != null) {
+               reasons.add(reason);
+            } else if (!used.contains(path)) {
+               dropped.add(path);
+            }
          }
       }
 
@@ -322,6 +351,10 @@ public final class ConfigMigration {
 
       plugin.getLogger().info("[config] config.yml from Infuse " + from + " was converted to the new layout (everything for an effect is now"
          + " in effects.<effect>). The old file was saved as " + backup.getName());
+      for (String reason : reasons) {
+         plugin.getLogger().info("[config] " + reason + ".");
+      }
+
       if (!dropped.isEmpty()) {
          plugin.getLogger().warning("[config] These old settings don't exist any more and were not carried over: " + String.join(", ", dropped));
       }
@@ -373,6 +406,16 @@ public final class ConfigMigration {
       plugin.getLogger().info("[config] Added missing settings to config.yml with their default values: " + String.join(", ", added));
       plugin.reloadConfig();
       return true;
+   }
+
+   private static String removedReason(String path) {
+      for (Map.Entry<String, String> e : REMOVED.entrySet()) {
+         if (path.equals(e.getKey()) || path.startsWith(e.getKey() + ".")) {
+            return e.getValue();
+         }
+      }
+
+      return null;
    }
 
    private static Map<String, String> ingredients(ConfigurationSection recipe) {

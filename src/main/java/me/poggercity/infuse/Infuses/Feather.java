@@ -51,7 +51,8 @@ public class Feather implements Listener {
 
    private boolean hasImmortalHackEquipped(Player player, String tier) {
       String currentHack = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), tier);
-      return currentHack != null && (currentHack.equals("Feather Effect") || currentHack.equals("Augmented Feather Effect"));
+      return currentHack != null && (currentHack.equals("Feather Effect") || currentHack.equals("Augmented Feather Effect"))
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    public void activateSpark(Player player) {
@@ -121,6 +122,8 @@ public class Feather implements Listener {
             }
 
             world.playSound(loc, Sound.ITEM_MACE_SMASH_GROUND_HEAVY, 1.5F, 1.0F);
+            // The slam throws the player again; a Feather spark from Gamble keeps them safe for that landing too.
+            Gamble.extendRolledSpark(player, KEY, 15L);
             Location anchor = player.getLocation();
             Bukkit.getRegionScheduler().runDelayed(this.plugin, anchor, task -> {
                if (player.isOnline()) {
@@ -182,7 +185,9 @@ public class Feather implements Listener {
    public void onPlayerFallDamage(EntityDamageEvent event) {
       if (event.getEntity() instanceof Player && event.getCause() == DamageCause.FALL) {
          Player player = (Player)event.getEntity();
-         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && Settings.passive(KEY, "no_fall_damage")) {
+         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2")) && Settings.passive(KEY, "no_fall_damage")
+            // The Feather spark from Gamble's slot machine launches the player too; landing from it doesn't hurt.
+            || Gamble.rolledSpark(player, KEY)) {
             event.setCancelled(true);
          }
       }

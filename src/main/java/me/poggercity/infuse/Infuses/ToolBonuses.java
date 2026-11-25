@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import me.poggercity.infuse.Managers.AttributeBonus;
@@ -99,7 +100,7 @@ public class ToolBonuses implements Listener {
          }
       }
 
-      return false;
+      return Gamble.borrowsPassive(player, name.toLowerCase(Locale.ROOT));
    }
 
    private static boolean worldDisabled(Player player) {

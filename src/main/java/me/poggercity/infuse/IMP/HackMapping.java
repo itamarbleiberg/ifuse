@@ -8,6 +8,7 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
+import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -315,6 +316,28 @@ public enum HackMapping {
       public ItemStack createItem() {
          return Augmented.createAPOPHIS();
       }
+   },
+   GAMBLE(Gamble.GEM_NAME) {
+      @Override
+      public boolean matchesItem(ItemStack item) {
+         return Gamble.isGambleGem(item);
+      }
+
+      @Override
+      public ItemStack createItem() {
+         return Effects.createGAMBLE();
+      }
+   },
+   GAMBLE1(Gamble.AUGMENTED_NAME) {
+      @Override
+      public boolean matchesItem(ItemStack item) {
+         return Augmented.ISGAMBLE(item);
+      }
+
+      @Override
+      public ItemStack createItem() {
+         return Augmented.createGAMBLE();
+      }
    };
 
    private final String hackName;
@@ -379,7 +402,9 @@ public enum HackMapping {
          THUNDER,
          DREAM1,
          APOPHIS,
-         APOPHIS1
+         APOPHIS1,
+         GAMBLE,
+         GAMBLE1
       };
    }
 }

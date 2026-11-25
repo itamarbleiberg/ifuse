@@ -183,7 +183,8 @@ public class Haste implements Listener {
       hack1 = hack1 != null ? ChatColor.stripColor(hack1) : null;
       hack2 = hack2 != null ? ChatColor.stripColor(hack2) : null;
       return hack1 != null && (hack1.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack1.equalsIgnoreCase("Augmented Haste Effect"))
-         || hack2 != null && (hack2.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack2.equalsIgnoreCase("Augmented Haste Effect"));
+         || hack2 != null && (hack2.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack2.equalsIgnoreCase("Augmented Haste Effect"))
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    public void activateSpark(Player player) {

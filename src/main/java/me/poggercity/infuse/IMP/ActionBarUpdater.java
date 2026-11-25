@@ -5,7 +5,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.HexColorTranslator;
+import me.poggercity.infuse.Managers.EffectKeys;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
 import me.poggercity.infuse.Managers.PlayerHackManager;
@@ -63,6 +65,19 @@ public class ActionBarUpdater {
       this.hackKeys.put("Augmented Thunder Effect", "thunder");
       this.hackKeys.put("Apophis Effect", "apophis");
       this.hackKeys.put("Augmented Apophis Effect", "apophis");
+      this.hackKeys.put(Gamble.GEM_NAME, Gamble.KEY);
+      this.hackKeys.put(Gamble.AUGMENTED_NAME, Gamble.KEY);
+   }
+
+   // Gamble has no icon in the resource pack: a die, followed by the effect whose passives it gives right now.
+   private String gambleIcon(Player player, String hack, String emoji) {
+      if (!hack.equals(Gamble.GEM_NAME) && !hack.equals(Gamble.AUGMENTED_NAME)) {
+         return emoji;
+      } else {
+         String passive = Gamble.currentPassive(player);
+         String die = HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(Gamble.KEY)) + EffectKeys.icon(Gamble.KEY);
+         return passive == null ? die : die + " " + HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(passive)) + EffectKeys.title(passive);
+      }
    }
 
    private String getHackColor(String hack) {
@@ -106,6 +121,9 @@ public class ActionBarUpdater {
                return HexColorTranslator.translateToMinecraftColor("#d1a44b");
             case "Ender Effect":
                return HexColorTranslator.translateToMinecraftColor("#3A0735");
+            case Gamble.GEM_NAME:
+            case Gamble.AUGMENTED_NAME:
+               return HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(Gamble.KEY));
             default:
                return ChatColor.GRAY.toString();
          }
@@ -140,6 +158,10 @@ public class ActionBarUpdater {
             }
          }
 
+         if (commonHack != null) {
+            firstEmoji = this.gambleIcon(player, ChatColor.stripColor(commonHack), firstEmoji);
+         }
+
          String secondTime = "";
          String key = "";
          if (legendaryHack != null) {
@@ -159,6 +181,10 @@ public class ActionBarUpdater {
                   key = this.getCooldownEmoji(stripped);
                }
             }
+         }
+
+         if (legendaryHack != null) {
+            key = this.gambleIcon(player, ChatColor.stripColor(legendaryHack), key);
          }
 
          String stripped = "    ";

@@ -8,6 +8,7 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
+import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -46,6 +47,7 @@ public class Abilities implements CommandExecutor, Listener {
    private final Thunder thunderAbility;
    private final Ender dragon;
    private final Apophis apophisAbility;
+   private final Gamble gambleAbility;
 
    public Abilities(Infuse plugin) {
       this.plugin = plugin;
@@ -63,6 +65,7 @@ public class Abilities implements CommandExecutor, Listener {
       this.thunderAbility = plugin.getThunder();
       this.dragon = plugin.getEnder();
       this.apophisAbility = plugin.getApophis();
+      this.gambleAbility = plugin.getGamble();
    }
 
    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -284,6 +287,11 @@ public class Abilities implements CommandExecutor, Listener {
                } else {
                   player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
                }
+               break;
+            case Gamble.GEM_NAME:
+            case Gamble.AUGMENTED_NAME:
+               // The slot machine plays its own sounds and uses the spark it lands on after spinning.
+               this.gambleAbility.activateSpark(player);
                break;
             case "Ender Effect":
                if (CooldownManager.isOnCooldown(player.getUniqueId(), "ender")) {

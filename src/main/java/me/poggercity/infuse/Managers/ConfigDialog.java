@@ -117,6 +117,8 @@ public class ConfigDialog implements TabExecutor {
          String first = args.length > 0 ? args[0].toLowerCase(Locale.ROOT) : "";
          if (first.equals("general") || first.equals("rituals")) {
             this.openSection(player, first, title(first), () -> this.openMenu(player));
+         } else if (first.equals("starting_effects") || first.equals("starting")) {
+            this.openSection(player, "starting_effects", "Starting effects", () -> this.openMenu(player));
          } else if (isEffect(first)) {
             String part = args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : "";
             String[] match = null;
@@ -147,6 +149,7 @@ public class ConfigDialog implements TabExecutor {
       List<String> options = new ArrayList<>();
       if (args.length == 1) {
          options.add("general");
+         options.add("starting_effects");
          options.add("rituals");
          options.add("reload");
          options.addAll(Arrays.asList(Infuse.EFFECT_KEYS));
@@ -226,8 +229,10 @@ public class ConfigDialog implements TabExecutor {
 
    public void openMenu(Player player) {
       List<ActionButton> buttons = new ArrayList<>();
-      buttons.add(button("General", NamedTextColor.GOLD, "Disabled worlds, swapping, death drops, first join", 150,
+      buttons.add(button("General", NamedTextColor.GOLD, "Disabled worlds, swapping, death drops, update speed", 150,
          this.callback((view, p) -> this.openSection(p, "general", "General", () -> this.openMenu(p)))));
+      buttons.add(button("Starting effects", NamedTextColor.GOLD, "Which effects players can start with (selector, random effect on first join)", 150,
+         this.callback((view, p) -> this.openSection(p, "starting_effects", "Starting effects", () -> this.openMenu(p)))));
       buttons.add(button("Rituals", NamedTextColor.GOLD, "Settings for every ritual, like how far from 0, 0 effects can be made", 150,
          this.callback((view, p) -> this.openSection(p, "rituals", "Rituals", () -> this.openMenu(p)))));
 
@@ -301,10 +306,13 @@ public class ConfigDialog implements TabExecutor {
          return "";
       } else if (name.contains("chance") || name.contains("percent")) {
          return " (%)";
+      } else if (name.endsWith("seconds") || name.equals("minutes")) {
+         // The name already says it ("Roll seconds", "Augmented ritual seconds")
+         return "";
       } else if (name.contains("seconds") || name.equals("cooldown") || name.equals("duration") || name.equals("swap_cooldown")) {
          return " (seconds)";
       } else if (name.contains("ticks")) {
-         return " (ticks, 20 = 1 second)";
+         return " (20 = 1 second)";
       } else if (name.contains("radius") || name.contains("distance") || name.equals("min_fall") || name.equals("max_blocks")) {
          return " (blocks)";
       } else if (name.contains("multiplier") || name.equals("step") || name.equals("max")) {
@@ -330,8 +338,12 @@ public class ConfigDialog implements TabExecutor {
          lines.addAll(t.getComments(path));
       }
 
-      if (lines.isEmpty() && rel.endsWith(".enabled")) {
-         lines.addAll(t.getComments(path.substring(0, path.length() - ".enabled".length())));
+      // A group's comment (above "fall_attack:" or "can_roll:") is shown once, with the group's first setting.
+      int dot = path.lastIndexOf('.');
+      String parent = dot > 0 ? path.substring(0, dot) : "";
+      ConfigurationSection group = parent.equals(sectionPath) ? null : t.getConfigurationSection(parent);
+      if (lines.isEmpty() && group != null && !group.getKeys(false).isEmpty() && group.getKeys(false).iterator().next().equals(path.substring(dot + 1))) {
+         lines.addAll(t.getComments(parent));
       }
 
       return clean(lines);

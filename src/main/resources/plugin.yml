@@ -1,5 +1,5 @@
 name: Infuse
-version: '2.6'
+version: '2.7'
 main: me.poggercity.infuse.Managers.Infuse
 api-version: '1.21.11'
 authors: [ Pogger city ]
@@ -56,7 +56,7 @@ commands:
     permission: infuse.startritual
   infuseconfig:
     description: Opens the in-game settings editor (everything in config.yml, and the recipes).
-    usage: /infuseconfig [general|rituals|reload|<effect> [craft|spark|particles|passives|recipe]]
+    usage: /infuseconfig [general|starting_effects|rituals|reload|<effect> [craft|spark|particles|passives|recipe]]
     aliases: [infusesettings]
     permission: infuse.config
 

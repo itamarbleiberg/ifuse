@@ -37,7 +37,8 @@ public class Strength implements Listener {
       String legendaryHack = Infuse.getInstance().getHackManager().getHack(uuid, "1");
       String commonHack = Infuse.getInstance().getHackManager().getHack(uuid, "2");
       return legendaryHack != null && (legendaryHack.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || legendaryHack.equals("Augmented Strength Effect"))
-         || commonHack != null && (commonHack.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || commonHack.equals("Augmented Strength Effect"));
+         || commonHack != null && (commonHack.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || commonHack.equals("Augmented Strength Effect"))
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    private void updateAttackDamageBasedOnHealth(Player player) {

@@ -35,6 +35,16 @@ public final class Settings {
       return v instanceof Boolean b ? b : def;
    }
 
+   /** A true/false setting at any path. */
+   public static boolean flag(String path, boolean def) {
+      return bool(path, def);
+   }
+
+   /** Whether players can start with this effect (effect selector, random effect on first join). */
+   public static boolean startingAllowed(String effect) {
+      return bool("starting_effects." + effect, true);
+   }
+
    public static String effectPath(String effect) {
       return ROOT + "." + effect;
    }

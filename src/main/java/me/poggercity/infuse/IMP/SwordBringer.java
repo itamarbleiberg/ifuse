@@ -6,9 +6,11 @@ import me.poggercity.infuse.Infuses.Apophis;
 import me.poggercity.infuse.Infuses.Augmented;
 import me.poggercity.infuse.Infuses.Effects;
 import me.poggercity.infuse.Infuses.Emerald;
+import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
+import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -79,7 +81,8 @@ public class SwordBringer implements Listener, CommandExecutor {
       Effects.createOCEAN(),
       Effects.createFIRE(),
       Effects.createSPEED(),
-      Effects.createDRAGON()
+      Effects.createDRAGON(),
+      Effects.createGAMBLE()
    );
    private final List<ItemStack> gems2 = Arrays.asList(
       Augmented.createINVIS(),
@@ -95,7 +98,8 @@ public class SwordBringer implements Listener, CommandExecutor {
       Augmented.createOCEAN(),
       Augmented.createFIRE(),
       Augmented.createSPEED(),
-      Effects.createDRAGON()
+      Effects.createDRAGON(),
+      Augmented.createGAMBLE()
    );
 
    public SwordBringer(JavaPlugin plugin, HackEquipListener hackEquipListener) {
@@ -133,13 +137,8 @@ public class SwordBringer implements Listener, CommandExecutor {
          gui.setItem(slotIndex, orangePane);
       }
 
-      int[] var21 = new int[]{11, 12, 13, 14, 15, 21, 22, 23, 39, 40, 41, 49, 31};
-
-      for (int var18 = 0; var18 < var21.length; var18++) {
-         if (var18 < this.gems.size()) {
-            gui.setItem(var21[var18], this.gems.get(var18));
-         }
-      }
+      // All 15 effects (13 slots used to leave Ender out).
+      HackRerollListener.placeEffects(gui, this.gems);
 
       for (int var19 = 0; var19 < gui.getSize(); var19++) {
          if (gui.getItem(var19) == null) {
@@ -176,13 +175,7 @@ public class SwordBringer implements Listener, CommandExecutor {
          gui.setItem(slotIndex, orangePane);
       }
 
-      int[] var21 = new int[]{11, 12, 13, 14, 15, 21, 22, 23, 39, 40, 41, 49, 31};
-
-      for (int var18 = 0; var18 < var21.length; var18++) {
-         if (var18 < this.gems2.size()) {
-            gui.setItem(var21[var18], this.gems2.get(var18));
-         }
-      }
+      HackRerollListener.placeEffects(gui, this.gems2);
 
       for (int var19 = 0; var19 < gui.getSize(); var19++) {
          if (gui.getItem(var19) == null) {
@@ -274,6 +267,12 @@ public class SwordBringer implements Listener, CommandExecutor {
                this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Fire Effect");
             } else if (Augmented.ISTHUNDER(clickedItem)) {
                this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Thunder Effect");
+            } else if (Gamble.isGambleGem(clickedItem)) {
+               this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.GEM_NAME);
+            } else if (Augmented.ISGAMBLE(clickedItem)) {
+               this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.AUGMENTED_NAME);
+            } else if (Ender.isStrengthGem(clickedItem)) {
+               this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Ender Effect");
             }
 
             CooldownManager.setCooldown(player.getUniqueId(), "pickinganeffectlol", 1L);

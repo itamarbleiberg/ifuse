@@ -195,8 +195,9 @@ public final class EffectLore {
                .passive("swim_faster", "Swim faster")
                .passive("conduit_power", "Breathe underwater")
                .passive(
-                  "water_bonus",
-                  "+" + v(e, "water_bonus", "extra_hearts", 2) + " hearts and Regeneration " + v(e, "water_bonus", "regeneration_level", 1) + " while in water"
+                  "mining_fatigue_on_hit",
+                  "Every " + ordinal(v(e, "mining_fatigue_on_hit", "hits", 10)) + " hit gives the player Mining Fatigue " + v(e, "mining_fatigue_on_hit", "level", 2),
+                  "for " + v(e, "mining_fatigue_on_hit", "seconds", 3) + " seconds"
                )
                .passive("drowning_aura", "Make everyone around you start drowning")
                .passive("trident_pull", "Tridents pull players")
@@ -260,6 +261,16 @@ public final class EffectLore {
                   "Cursing a player resets the spark cooldown"
                )
                .build(1, Settings.sparkInt("ender", "cooldown", 10));
+         }
+         case "gamble": {
+            String e = "gamble";
+            double minutes = Settings.value(e, "random_passive", "minutes", 5.0);
+            String every = minutes == 1.0 ? "minute" : num(minutes) + " minutes";
+            int roll = Math.max(1, Settings.sparkInt(e, "roll_seconds", 5));
+            return new Builder(e, hex("#12A37F"), hex("#1EE8B6"), "\ud83c\udfb2")
+               .passive("random_passive", "Every " + every + " you get the passives of a random effect", "(a different one each time, never Ender or Apophis)")
+               .spark("Spins a slot machine for " + roll + " seconds", "Then uses the spark of a random effect", "(never Ender or Apophis)")
+               .build(roll, cooldown("gamble", 120, augmented));
          }
          case "apophis": {
             String c = hex("#301145");

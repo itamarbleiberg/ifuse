@@ -39,7 +39,8 @@ public class Regen implements Listener {
 
    private boolean hasImmortalHackEquipped(Player player, String tier) {
       String currentHack = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), tier);
-      return currentHack != null && (currentHack.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || currentHack.equals("Augmented Regen Effect"));
+      return currentHack != null && (currentHack.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || currentHack.equals("Augmented Regen Effect"))
+         || Gamble.borrowsPassive(player, KEY);
    }
 
    @EventHandler
