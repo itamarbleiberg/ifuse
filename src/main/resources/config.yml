@@ -1,0 +1,557 @@
+# =====================================================================================================
+#  INFUSE SETTINGS
+#
+#  Everything in this file can also be changed in game with /infuseconfig (permission: infuse.config).
+#  After editing this file by hand, use /infuseconfig reload (or restart) to apply it.
+#
+#  Units: times are in seconds, chances in percent (0 - 100), distances in blocks,
+#         damage in half hearts (2 = 1 heart), levels like in game (1 = level I).
+# =====================================================================================================
+
+# Used to update this file automatically. Don't change it.
+config_version: 5
+
+# -----------------------------------------------------------------------------------------------------
+#  GENERAL
+# -----------------------------------------------------------------------------------------------------
+general:
+  # Effects do nothing in these worlds
+  disabled_worlds: [lobby]
+  # false = the Apophis effect does nothing
+  apophis_enabled: true
+  # Seconds a player has to wait after swapping or draining an effect before doing it again
+  swap_cooldown: 60
+  # true = players can't swap or drain effects while one of their sparks is on cooldown
+  no_swap_while_spark_on_cooldown: false
+  # true = a player can only have one primary effect
+  # (primary: Invis, Haste, Regen, Apophis, Ender, Feather, Thunder, Strength, Frost, Heart, Winner's Curse)
+  only_one_primary_effect: false
+  # Effects a player drops when they die: 0 = none, 1 = one effect, 2 = both
+  drop_effects_on_death: 1
+  # true = the swap-hands key (F) uses sparks (sneak + F for the first one) instead of /lspark and /rspark.
+  # Each player can switch with /controls
+  sparks_on_swap_hands_key: false
+  # How often the action bar and the passives update, in ticks (20 ticks = 1 second)
+  action_bar_update_ticks: 1
+  passive_update_ticks: 1
+
+# -----------------------------------------------------------------------------------------------------
+#  STARTING EFFECTS
+#  Which effects players can start with. The effect selector (/giveselector) only offers these, and the
+#  random effect a player can get the first time they join is always one of these.
+# -----------------------------------------------------------------------------------------------------
+starting_effects:
+  # Give players a random effect the first time they join (only the first option that is true is used)
+  random_effect_on_first_join: false
+  random_primary_effect_on_first_join: false
+  random_secondary_effect_on_first_join: false
+  # true = players can start with this effect, false = they can't
+  emerald: true
+  feather: true
+  fire: true
+  frost: true
+  haste: true
+  heart: true
+  invis: true
+  ocean: true
+  regen: true
+  speed: true
+  strength: true
+  thunder: true
+  ender: true
+  apophis: true
+  winners_curse: true
+
+# -----------------------------------------------------------------------------------------------------
+#  RITUALS
+#  Effects are crafted in a crafting table opened by right-clicking a brewing stand.
+#  Each effect's crafting limits, ritual times, dimensions and recipe are in its own section below.
+# -----------------------------------------------------------------------------------------------------
+rituals:
+  # Only one ritual can run on the whole server at a time
+  one_at_a_time: true
+  # Right-clicking a brewing stand opens a crafting table instead of the brewing menu
+  brewing_stand_opens_crafting: true
+  # Show a beam of light over a brewing stand while its ritual runs
+  beam: true
+  # Effects can only be crafted within this many blocks of 0, 0 (0 = anywhere)
+  max_distance_from_0_0: 0
+
+# -----------------------------------------------------------------------------------------------------
+#  EFFECTS
+#  Every effect has the same parts:
+#    craft:     how many can be made, ritual times, the dimensions it can be made in, and its recipe
+#               (recipe shape: 3 rows of 3 letters, a space is an empty slot; each letter is an item)
+#    spark:     the ability (cooldown, how long it lasts, its radius and strength)
+#    particles: aura = particles around players who have the effect, spark_percent = % of the spark's particles
+#    passives:  what the effect does all the time. Every passive can be turned off with enabled: false
+# -----------------------------------------------------------------------------------------------------
+effects:
+
+  emerald:
+    craft:
+      augmented_crafts: 1             # how many augmented Emerald effects can be made (the first crafts)
+      normal_crafts: 3                # how many normal ones after that (-1 = unlimited)
+      augmented_ritual_seconds: 600   # ritual time for an augmented effect
+      normal_ritual_seconds: 0        # ritual time for a normal effect (0 = crafted instantly)
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["WSW", "OEO", "CTC"]
+        ingredients:
+          W: WILD_ARMOR_TRIM_SMITHING_TEMPLATE
+          S: SNIFFER_EGG
+          E: EMERALD_BLOCK
+          O: OMINOUS_BOTTLE
+          C: ENDER_CHEST
+          T: ENCHANTING_TABLE
+    spark:
+      cooldown: 30
+      duration: 10
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Food and potions sometimes aren't used up (spark_chance: while the spark is on)
+      consumable_refund: {enabled: true, chance: 25, spark_chance: 50}
+      # Thrown wind charges and XP bottles sometimes come back
+      throwable_refund: {enabled: true, chance: 25, spark_chance: 50}
+      # Enchanting tables always offer level 30
+      enchanting_table: {enabled: true}
+      # More experience from everything
+      exp_boost: {enabled: true, multiplier: 1.5, spark_multiplier: 3.0}
+      # Kills with a sword count as Looting at this level
+      looting: {enabled: true, level: 5}
+      luck: {enabled: true, level: 10}
+      hero_of_the_village: {enabled: true, level: 3}
+
+  feather:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["BPB", "FHF", "BPB"]
+        ingredients:
+          B: BREEZE_ROD
+          P: PHANTOM_MEMBRANE
+          H: HEAVY_CORE
+          F: FEATHER
+    spark:
+      cooldown: 40
+      damage: 8.0                     # slam damage to players nearby
+      radius: 4.0                     # slam radius
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      no_fall_damage: {enabled: true}
+      # Hitting someone after falling at least min_fall blocks does more damage
+      fall_attack: {enabled: true, min_fall: 7, multiplier: 1.5}
+      # A wind charge pushes the attacker away after you are hit this many times
+      wind_charge_counter: {enabled: true, hits: 10}
+      # Wind charge cooldown in ticks (normal is 10)
+      wind_charge_cooldown: {enabled: true, ticks: 5}
+      # Wind charges fly faster and perfectly straight
+      wind_charge_boost: {enabled: true, velocity: 2.0}
+
+  fire:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["URU", "NPN", "URU"]
+        ingredients:
+          U: NETHERITE_UPGRADE_SMITHING_TEMPLATE
+          R: RESPAWN_ANCHOR
+          N: NETHERITE_INGOT
+          P: MUSIC_DISC_PIGSTEP
+    spark:
+      cooldown: 60
+      duration: 4
+      radius: 5.0
+      launch_strength: 4.0            # how high Final Ignition throws players
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      fire_resistance: {enabled: true}
+      # Fly while in lava
+      lava_flight: {enabled: true}
+      # Water near you evaporates (spark_radius: while the spark is on)
+      evaporate_water: {enabled: true, radius: 3, spark_radius: 7}
+      # Iron, gold, copper and ancient debris drop smelted (Fortune never works on ancient debris)
+      auto_smelt: {enabled: true}
+      # Sets the target on fire every few hits
+      ignite_on_hit: {enabled: true, hits: 10, seconds: 3}
+      # Fire damage you deal goes up with every hit (step), up to max
+      fire_damage_boost: {enabled: true, step: 1.3, max: 3.0}
+      # Placing lava right before landing cancels the fall damage
+      lava_bucket_clutch: {enabled: true, seconds: 2}
+      # Fully charged arrows are set on fire
+      flame_arrows: {enabled: true}
+
+  frost:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["TPT", "HDH", "TPT"]
+        ingredients:
+          P: PEARLESCENT_FROGLIGHT
+          T: FLOW_ARMOR_TRIM_SMITHING_TEMPLATE
+          H: GOAT_HORN
+          D: MUSIC_DISC_CREATOR
+    spark:
+      cooldown: 90
+      duration: 10
+      radius: 5.0
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Speed on ice and snow
+      ice_speed: {enabled: true, level: 3}
+      # Freezes players every few hits
+      freeze_on_hit: {enabled: true, hits: 10, seconds: 10}
+      # Freezes mobs on every hit
+      freeze_mobs: {enabled: true, seconds: 10}
+      # Wind charge cooldown of frozen enemies
+      frozen_wind_charge_cooldown: {enabled: true, seconds: 3}
+
+  haste:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["DBD", "GEG", "DND"]
+        ingredients:
+          D: DIAMOND_BLOCK
+          B: BEACON
+          G: GOLD_BLOCK
+          E: DEEPSLATE_EMERALD_ORE
+          N: NETHERITE_PICKAXE
+    spark:
+      cooldown: 60
+      duration: 15
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      haste_effect: {enabled: true, level: 2}
+      # The pickaxe, axe, shovel or hoe in your hand gets these enchantments. The tool keeps them for good,
+      # also after Haste is gone or when it is given to another player
+      tool_enchants: {enabled: true, efficiency: 10, fortune: 5, unbreaking: 5}
+      # Sneak while mining an ore to mine the whole vein (at most max_blocks)
+      vein_miner: {enabled: true, max_blocks: 64}
+      # Axes disable your shield for only this long (normal is 5)
+      shield_cooldown: {enabled: true, seconds: 2.5}
+
+  heart:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["PTP", "EBE", "PTP"]
+        ingredients:
+          P: POTION                   # Potion of Healing
+          E: ENCHANTED_GOLDEN_APPLE
+          B: BEETROOT
+          T: TOTEM_OF_UNDYING
+    spark:
+      cooldown: 120
+      duration: 60
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      extra_hearts: {enabled: true, hearts: 5}
+      # All food gives Absorption
+      food_absorption: {enabled: true, level: 1, seconds: 30}
+      # Enchanted golden apples give more Absorption
+      golden_apple_absorption: {enabled: true, level: 5, seconds: 120}
+      # Shows the health of the player you hit every few hits
+      health_display: {enabled: true, hits: 10}
+
+  invis:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["EME", "SOS", "ERE"]
+        ingredients:
+          E: ENDER_EYE
+          M: MUSIC_DISC_5
+          R: RECOVERY_COMPASS
+          S: SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE
+          O: OMINOUS_TRIAL_KEY
+    spark:
+      cooldown: 90
+      duration: 10
+      radius: 10.0
+    # Invis has no aura particles: they would give invisible players away
+    particles: {spark_percent: 100}
+    passives:
+      invisibility: {enabled: true}
+      # Every few hits the target gets Blindness and Wither (the black hearts hide their health)
+      blind_on_hit: {enabled: true, hits: 10, seconds: 4}
+      # Mobs can't see you
+      mob_invisibility: {enabled: true}
+      # Arrows you shoot blind players
+      arrow_blind: {enabled: true, seconds: 4}
+
+  ocean:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["EHE", "TCT", "EHE"]
+        ingredients:
+          E: TIDE_ARMOR_TRIM_SMITHING_TEMPLATE
+          H: HEART_OF_THE_SEA
+          T: TRIDENT
+          C: CONDUIT
+    spark:
+      cooldown: 90
+      duration: 5
+      radius: 15.0
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Breathe underwater (Conduit Power)
+      conduit_power: {enabled: true}
+      # Every few hits the player you hit gets Mining Fatigue
+      mining_fatigue_on_hit: {enabled: true, hits: 10, level: 2, seconds: 3}
+      # Swim as fast as with Depth Strider III
+      swim_faster: {enabled: true}
+      # Players near you start drowning (damage per second once their air is gone)
+      drowning_aura: {enabled: true, radius: 5.0, damage: 4}
+      # Tridents pull the players they hit
+      trident_pull: {enabled: true, strength: 1.5}
+
+  regen:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["EHE", "PAP", "EME"]
+        ingredients:
+          E: END_CRYSTAL
+          H: HONEY_BLOCK
+          P: PEARLESCENT_FROGLIGHT
+          A: AXOLOTL_BUCKET
+          M: MUSIC_DISC_CREATOR_MUSIC_BOX
+    spark:
+      cooldown: 60
+      duration: 30
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Every hit you land gives you Regeneration
+      regen_on_hit: {enabled: true, level: 2, seconds: 2}
+      # Eating gives extra saturation
+      extra_saturation: {enabled: true, amount: 6}
+
+  speed:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["RSR", "DHE", "RNR"]
+        ingredients:
+          R: RABBIT_FOOT
+          S: SADDLE
+          D: DUNE_ARMOR_TRIM_SMITHING_TEMPLATE
+          H: DIAMOND_HORSE_ARMOR
+          E: EYE_ARMOR_TRIM_SMITHING_TEMPLATE
+          N: NETHERITE_BOOTS
+    spark:
+      cooldown: 20
+      dash_strength: 1.0
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Speed that goes up by one level with every hit (up to max_level), back to base_level after reset_seconds
+      speed_stacking: {enabled: true, base_level: 1, max_level: 3, reset_seconds: 0.5}
+
+  strength:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["PRP", "SWA", "PRP"]
+        ingredients:
+          P: PLAYER_HEAD
+          R: RIB_ARMOR_TRIM_SMITHING_TEMPLATE
+          S: NETHERITE_SWORD
+          W: WITHER_ROSE
+          A: NETHERITE_AXE
+    spark:
+      cooldown: 60
+      duration: 15
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # More damage to mobs
+      mob_damage: {enabled: true, multiplier: 2.0}
+      # Hitting a shield disables it
+      shield_disable: {enabled: true, seconds: 10}
+      # Arrows go through enemies
+      piercing_arrows: {enabled: true}
+      # +1 damage under 6 hearts, +2 under 4 hearts, +3 under 2 hearts
+      low_health_damage: {enabled: true}
+
+  thunder:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["BLB", "TCT", "BLB"]
+        ingredients:
+          B: BOLT_ARMOR_TRIM_SMITHING_TEMPLATE
+          L: LODESTONE
+          C: CREEPER_HEAD
+          T: TRIDENT
+    spark:
+      cooldown: 90
+      duration: 10
+      radius: 7.0
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Lightning strikes the player you hit every few hits (rain_hits while it rains), dealing this many hearts
+      smite_on_hit: {enabled: true, hits: 10, rain_hits: 5, hearts: 1.0}
+      # The lightning jumps to other enemies nearby
+      chain_lightning: {enabled: true}
+      # Thrown tridents call lightning
+      trident_smite: {enabled: true}
+
+  ender:
+    craft:
+      augmented_crafts: 0
+      normal_crafts: 1
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["HSH", "SDS", "HSH"]
+        ingredients:
+          S: SPIRE_ARMOR_TRIM_SMITHING_TEMPLATE
+          D: DRAGON_EGG
+          H: DRAGON_HEAD
+    spark:
+      cooldown: 10
+      damage: 4.0
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Untrusted players near you glow
+      glowing: {enabled: true, radius: 50.0}
+      # Dragon's breath shoots fireballs that curse players
+      dragon_fireball: {enabled: true, cooldown_seconds: 30}
+      # Cursed players share the damage they take
+      curse: {enabled: true, seconds: 7}
+
+  apophis:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 1
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["ABA", "BCB", "DBE"]
+        ingredients:
+          A: NETHERITE_UPGRADE_SMITHING_TEMPLATE
+          B: NETHERITE_BLOCK
+          C: NETHER_STAR
+          D: MUSIC_DISC_OTHERSIDE
+          E: ENCHANTED_BOOK
+    spark:
+      cooldown: 90
+      duration: 20
+      radius: 5.0
+      area_effect_seconds: 10         # how long Blindness and Wither last on enemies in the radius
+    particles: {aura: false, aura_amount: 2, spark_percent: 100}
+    passives:
+      regeneration: {enabled: true}
+      water_breathing: {enabled: true}
+      fire_resistance: {enabled: true}
+      lava_flight: {enabled: true}
+      luck: {enabled: true}
+      haste: {enabled: true}
+      # Wither on the player you hit every few hits
+      wither_on_hit: {enabled: true, hits: 10, seconds: 5}
+      # While the spark is on: tools count as Efficiency 10 / Fortune 5, weapons as Sharpness 5 / Looting 5
+      spark_tool_bonus: {enabled: true}
+
+  # Winner's Curse (called Gamble in 2.7)
+  winners_curse:
+    craft:
+      augmented_crafts: 1
+      normal_crafts: 3
+      augmented_ritual_seconds: 600
+      normal_ritual_seconds: 0
+      dimensions: [overworld, nether, end]
+      recipe:
+        shape: ["VGV", "ERE", "VGV"]
+        ingredients:
+          V: VEX_ARMOR_TRIM_SMITHING_TEMPLATE
+          G: GOLD_BLOCK
+          E: EMERALD_BLOCK
+          R: MUSIC_DISC_RELIC
+    spark:
+      # Starts once the won spark is over (or gone unused)
+      cooldown: 120
+      # How long the slot machine spins
+      roll_seconds: 5
+      # How long players have to use the spark they won (with their spark key); after that it is gone
+      use_within_seconds: 30
+      # Which effects' sparks the slot machine can land on (it never lands on Ender or Apophis)
+      can_roll:
+        emerald: true
+        feather: true
+        fire: true
+        frost: true
+        haste: true
+        heart: true
+        invis: true
+        ocean: true
+        regen: true
+        speed: true
+        strength: true
+        thunder: true
+    particles: {aura: true, aura_amount: 2, spark_percent: 100}
+    passives:
+      # Every few minutes you get all the passives of a random effect, a different one each time
+      # (never Ender or Apophis, and never an effect you already have)
+      random_passive:
+        enabled: true
+        minutes: 5
+        # Which effects' passives you can get
+        can_roll:
+          emerald: true
+          feather: true
+          fire: true
+          frost: true
+          haste: true
+          heart: true
+          invis: true
+          ocean: true
+          regen: true
+          speed: true
+          strength: true
+          thunder: true
