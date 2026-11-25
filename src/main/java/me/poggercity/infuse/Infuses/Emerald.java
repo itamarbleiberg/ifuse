@@ -228,8 +228,8 @@ public class Emerald implements Listener {
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "eme")) {
-         int duration = Infuse.getInstance().getConfig().getInt("durations.emerald_spark", 10);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.emerald_spark", 30);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.emerald.spark.duration", 10);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.emerald.spark.cooldown", 30);
          Location anchor = player.getLocation();
          Bukkit.getRegionScheduler()
             .run(Infuse.getInstance(), anchor, task -> player.addPotionEffect(new PotionEffect(PotionEffectType.HERO_OF_THE_VILLAGE, duration * 20, 254)));

@@ -41,7 +41,7 @@ public class Feather implements Listener {
    private static final String EMERALD_KEY = "feather";
    private final Plugin plugin;
    private final Map<UUID, Integer> hitCounter = new HashMap<>();
-   private static final String DAMAGE = "damage.feather_spark";
+   private static final String DAMAGE = "effects.feather.spark.damage";
    private final Set<UUID> landingPlayers = new HashSet<>();
    private final TrustManager trustManager = new TrustManager();
 
@@ -67,7 +67,7 @@ public class Feather implements Listener {
          Vector launchVector = dashDirection.multiply(0).setY(1);
          player.setVelocity(launchVector);
          CooldownManager.setDuration(playerUUID, "feather", 5L);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.feather_spark", 40);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.feather.spark.cooldown", 40);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented feather")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null
@@ -92,8 +92,8 @@ public class Feather implements Listener {
             player.removePotionEffect(PotionEffectType.UNLUCK);
             Location loc = player.getLocation();
             World world = player.getWorld();
-            double explosionRadius = Infuse.getInstance().getConfig().getDouble("radius.feather", 4.0);
-            double dmg = Infuse.getInstance().getConfig().getDouble("damage.feather_spark", 8.0);
+            double explosionRadius = Infuse.getInstance().getConfig().getDouble("effects.feather.spark.radius", 4.0);
+            double dmg = Infuse.getInstance().getConfig().getDouble("effects.feather.spark.damage", 8.0);
             if (dmg <= 0.0) {
                dmg = 8.0;
             }

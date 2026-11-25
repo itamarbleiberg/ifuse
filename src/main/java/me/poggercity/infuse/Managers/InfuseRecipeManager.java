@@ -164,7 +164,7 @@ public class InfuseRecipeManager implements Listener {
    }
 
    private void spawnCustomBeam(ActiveRitual ritual) {
-      if (this.plugin.getConfig().getBoolean("configs.brewing_beam", true)) {
+      if (this.plugin.getConfig().getBoolean("rituals.beam", true)) {
          Location brewingStandLocation = ritual.location.clone().add(0.5, 0.5, 0.5);
          World world = brewingStandLocation.getWorld();
          Location crystalLoc = new Location(world, brewingStandLocation.getX(), 600.0, brewingStandLocation.getZ());
@@ -195,7 +195,7 @@ public class InfuseRecipeManager implements Listener {
    // long ritual, or the ritual was resumed after a restart). They are put back once the chunk is loaded again, and
    // follow configs.brewing_beam if it is changed while a ritual runs.
    private void refreshBeam(ActiveRitual ritual) {
-      if (!this.plugin.getConfig().getBoolean("configs.brewing_beam", true)) {
+      if (!this.plugin.getConfig().getBoolean("rituals.beam", true)) {
          removeBeam(ritual);
          return;
       }
@@ -243,7 +243,7 @@ public class InfuseRecipeManager implements Listener {
       return this.plugin.getConfig().getBoolean("rituals.one_at_a_time", true);
    }
 
-   /** Starts a ritual. Ritual length comes from effect_settings.<effect>.ritual (augmented_seconds / normal_seconds). */
+   /** Starts a ritual. Ritual length comes from effects.<effect>.craft (augmented_ritual_seconds / normal_ritual_seconds). */
    private void startRitual(Player player, String recipeKey, Location brewingStand, boolean augmented) {
       int seconds = Settings.ritualSeconds(recipeKey, augmented);
       ActiveRitual ritual = new ActiveRitual(
@@ -557,6 +557,10 @@ public class InfuseRecipeManager implements Listener {
       return false;
    }
 
+   private static String tooFarMessage() {
+      return "Effects can only be crafted within " + Settings.maxCraftDistance() + " blocks of 0, 0";
+   }
+
    private static String effectLabel(String recipeKey) {
       return recipeKey.isEmpty() ? recipeKey : Character.toUpperCase(recipeKey.charAt(0)) + recipeKey.substring(1);
    }
@@ -614,11 +618,17 @@ public class InfuseRecipeManager implements Listener {
                return;
             }
 
+            if (!Settings.withinCraftDistance(player.getLocation())) {
+               event.setCancelled(true);
+               player.sendMessage(ChatColor.RED + tooFarMessage());
+               return;
+            }
+
             String firstTimeKey = "first_time." + recipeKey;
             String craftedKey = CRAFTED + "." + recipeKey;
             int limit = this.getCraftLimit(recipeKey);
             int crafted = this.recipeLimits.getInt(craftedKey, 0);
-            int maxAugments = this.plugin.getConfig().getInt("augments." + recipeKey, 1);
+            int maxAugments = Settings.augmentedCrafts(recipeKey);
             int usedAugments = this.recipeLimits.getInt(firstTimeKey, 0);
             boolean augmented = maxAugments == -1 || usedAugments < maxAugments;
             if (!augmented && limit != -1 && crafted >= limit) {
@@ -707,8 +717,14 @@ public class InfuseRecipeManager implements Listener {
       }
    }
 
+   /** A copy of the normal effect item that the recipe makes (for the recipe editor). */
+   public ItemStack getEffectPreview(String recipeKey) {
+      ItemStack item = this.standardResults.get(recipeKey);
+      return item == null ? null : item.clone();
+   }
+
    public int getCraftLimit(String recipeKey) {
-      return this.plugin.getConfig().getInt("effects." + recipeKey, 3);
+      return Settings.normalCrafts(recipeKey);
    }
 
    public Map<String, ItemStack> getFirstTimeRewards() {
@@ -741,7 +757,7 @@ public class InfuseRecipeManager implements Listener {
    }
 
    public int getMaxAugments(String recipeKey) {
-      return this.plugin.getConfig().getInt("augments." + recipeKey, 1);
+      return Settings.augmentedCrafts(recipeKey);
    }
 
    public int getUsedAugments(String recipeKey) {
@@ -766,8 +782,11 @@ public class InfuseRecipeManager implements Listener {
                player.sendActionBar(
                   ChatColor.RED + effectLabel(recipeKey) + " can only be made in: " + Settings.describeDimensions(Settings.ritualDimensions(recipeKey))
                );
+            } else if (!Settings.withinCraftDistance(player.getLocation())) {
+               event.getInventory().setResult(null);
+               player.sendActionBar(ChatColor.RED + tooFarMessage());
             } else {
-               int maxAug = this.plugin.getConfig().getInt("augments." + recipeKey, 1);
+               int maxAug = Settings.augmentedCrafts(recipeKey);
                int usedAug = this.recipeLimits.getInt("first_time." + recipeKey, 0);
                int limit = this.getCraftLimit(recipeKey);
                if (maxAug == -1 || usedAug < maxAug) {
@@ -799,19 +818,16 @@ public class InfuseRecipeManager implements Listener {
       this.clearAllRecipes();
       this.firstTimeRewards.clear();
       this.standardResults.clear();
-      ConfigurationSection recipes = this.plugin.getConfig().getConfigurationSection("recipes");
-      if (recipes != null) {
-         for (String key : recipes.getKeys(false)) {
-            ConfigurationSection sec = recipes.getConfigurationSection(key);
-            if (sec != null) {
-               this.loadRecipe(key, sec);
-            }
+      // Each effect's recipe is in effects.<effect>.craft.recipe. A recipe is taken as a whole from config.yml, or as a
+      // whole from the jar's defaults if config.yml doesn't have it (never mixed, the letters wouldn't match).
+      for (String key : Infuse.EFFECT_KEYS) {
+         String path = Settings.recipePath(key);
+         ConfigurationSection sec = this.plugin.getConfig().contains(path, true)
+            ? this.plugin.getConfig().getConfigurationSection(path)
+            : this.plugin.getConfig().getDefaults() == null ? null : this.plugin.getConfig().getDefaults().getConfigurationSection(path);
+         if (sec != null) {
+            this.loadRecipe(key, sec);
          }
-      }
-
-      ConfigurationSection apophisSection = this.plugin.getConfig().getConfigurationSection("apophis");
-      if (apophisSection != null && !this.firstTimeRewards.containsKey("apophis")) {
-         this.loadRecipe("apophis", apophisSection);
       }
 
       this.addMissingHardcodedRecipes();
@@ -840,6 +856,9 @@ public class InfuseRecipeManager implements Listener {
       return healing;
    }
 
+   // Loads one effect recipe from config.yml. If anything about it is wrong (shape, unknown item, a letter without an
+   // item), it isn't registered and the effect gets its built-in default recipe instead (addMissingHardcodedRecipes),
+   // so an effect is never left without a recipe.
    private void loadRecipe(String key, ConfigurationSection sec) {
       try {
          String recipeName = sec.getString("key", key);
@@ -850,67 +869,60 @@ public class InfuseRecipeManager implements Listener {
             return;
          }
 
-         this.firstTimeRewards.put(key, firstTime);
-         this.standardResults.put(key, standard);
          NamespacedKey nk = new NamespacedKey(this.plugin, recipeName);
          if (this.registeredRecipes.contains(nk)) {
             Bukkit.removeRecipe(nk);
             this.registeredRecipes.remove(nk);
          }
 
-         ShapedRecipe recipe = new ShapedRecipe(nk, standard);
          List<String> shape = sec.getStringList("shape");
          if (shape.size() != 3) {
-            this.plugin.getLogger().warning("Recipe '" + key + "' has invalid shape (need exactly 3 rows): " + shape);
+            this.plugin.getLogger().warning("Recipe '" + key + "' has an invalid shape (it needs exactly 3 rows), using the default recipe: " + shape);
             return;
          }
 
+         ShapedRecipe recipe = new ShapedRecipe(nk, standard);
          recipe.shape(new String[]{shape.get(0), shape.get(1), shape.get(2)});
+         String usedLetters = String.join("", shape);
          ConfigurationSection ings = sec.getConfigurationSection("ingredients");
-         if (ings != null) {
-            boolean ingredientsValid = true;
 
+         for (char c : usedLetters.toCharArray()) {
+            if (c != ' ' && (ings == null || !ings.contains(String.valueOf(c), true))) {
+               this.plugin.getLogger().warning("Recipe '" + key + "' uses '" + c + "' in its shape but has no item for it, using the default recipe");
+               return;
+            }
+         }
+
+         if (ings != null) {
             for (String ch : ings.getKeys(false)) {
-               if (ch.length() == 1) {
+               // Letters the shape doesn't use are skipped (2.5 could save extra letters into changed recipes).
+               if (ch.length() == 1 && usedLetters.indexOf(ch.charAt(0)) >= 0) {
                   char c = ch.charAt(0);
                   String materialName = ings.getString(ch, "").toUpperCase(Locale.ROOT);
                   if (key.equalsIgnoreCase("heart") && materialName.equals("POTION")) {
-                     ItemStack healingPotion = buildHealingPotionStack();
-                     RecipeChoice potionChoice = new ExactChoice(healingPotion);
-                     recipe.setIngredient(c, potionChoice);
+                     recipe.setIngredient(c, new ExactChoice(buildHealingPotionStack()));
                   } else {
-                     Material mat = Material.getMaterial(materialName);
-                     if (mat == null) {
-                        this.plugin.getLogger().warning("Unknown material '" + materialName + "' for symbol '" + c + "' in recipe '" + key + "'");
-                        ingredientsValid = false;
-                        break;
+                     Material mat = Material.matchMaterial(materialName);
+                     if (mat == null || !mat.isItem() || mat.isAir()) {
+                        this.plugin.getLogger().warning("Unknown item '" + materialName + "' for '" + c + "' in recipe '" + key + "', using the default recipe");
+                        return;
                      }
 
                      recipe.setIngredient(c, mat);
                   }
                }
             }
-
-            if (!ingredientsValid) {
-               this.plugin.getLogger().warning("Recipe '" + key + "' has invalid ingredients, skipping");
-               this.firstTimeRewards.remove(key);
-               this.standardResults.remove(key);
-               return;
-            }
          }
 
-         try {
-            Bukkit.addRecipe(recipe);
-            this.registeredRecipes.add(nk);
-            this.plugin.getLogger().info("Loaded recipe from config: " + key + " (NamespacedKey: " + nk.getKey() + ")");
-         } catch (Exception var17) {
-            this.plugin.getLogger().warning("Failed to add recipe '" + key + "': " + var17.getMessage());
-            this.firstTimeRewards.remove(key);
-            this.standardResults.remove(key);
-         }
-      } catch (Exception var18) {
-         this.plugin.getLogger().severe("Error loading recipe '" + key + "': " + var18.getMessage());
-         var18.printStackTrace();
+         Bukkit.addRecipe(recipe);
+         this.registeredRecipes.add(nk);
+         this.firstTimeRewards.put(key, firstTime);
+         this.standardResults.put(key, standard);
+         this.plugin.getLogger().info("Loaded recipe from config: " + key + " (NamespacedKey: " + nk.getKey() + ")");
+      } catch (Exception ex) {
+         this.firstTimeRewards.remove(key);
+         this.standardResults.remove(key);
+         this.plugin.getLogger().warning("Recipe '" + key + "' could not be added, using the default recipe: " + ex.getMessage());
       }
    }
 
@@ -1417,7 +1429,6 @@ public class InfuseRecipeManager implements Listener {
       try {
          this.plugin.getLogger().info("Reloading recipes from config...");
          this.clearAllRecipes();
-         this.plugin.reloadConfig();
          this.loadRecipesFromConfig();
          this.plugin.getLogger().info("Recipes reloaded successfully. Active recipes: " + this.firstTimeRewards.keySet());
       } catch (Exception var2) {

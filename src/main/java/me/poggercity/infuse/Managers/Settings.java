@@ -5,16 +5,17 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
 import org.bukkit.configuration.file.FileConfiguration;
 
 /**
- * Typed access to the per-effect settings in config.yml ("effect_settings.&lt;effect&gt;").
- * Values are read on every call, so changes from /infuseconfig or a config reload apply immediately.
+ * Typed access to config.yml. Every effect has one section, "effects.&lt;effect&gt;", with craft / spark / particles /
+ * passives in it. Values are read on every call, so changes from /infuseconfig or a reload apply immediately.
  */
 public final class Settings {
-   public static final String ROOT = "effect_settings";
+   public static final String ROOT = "effects";
 
    private Settings() {
    }
@@ -23,17 +24,60 @@ public final class Settings {
       return Infuse.getInstance().getConfig();
    }
 
+   // Reads a value from config.yml, then from the jar's config.yml, and only then uses the given default.
+   private static double num(String path, double def) {
+      Object v = cfg().get(path);
+      return v instanceof Number n ? n.doubleValue() : def;
+   }
+
+   private static boolean bool(String path, boolean def) {
+      Object v = cfg().get(path);
+      return v instanceof Boolean b ? b : def;
+   }
+
+   public static String effectPath(String effect) {
+      return ROOT + "." + effect;
+   }
+
+   // ----- general -----
+
+   public static List<String> disabledWorlds() {
+      return cfg().getStringList("general.disabled_worlds");
+   }
+
+   public static boolean worldDisabled(World world) {
+      for (String name : disabledWorlds()) {
+         if (name.equalsIgnoreCase(world.getName())) {
+            return true;
+         }
+      }
+
+      return false;
+   }
+
+   // ----- spark -----
+
+   public static double spark(String effect, String key, double def) {
+      return num(effectPath(effect) + ".spark." + key, def);
+   }
+
+   public static int sparkInt(String effect, String key, int def) {
+      return (int)num(effectPath(effect) + ".spark." + key, def);
+   }
+
+   // ----- passives -----
+
    public static String passivePath(String effect, String passive) {
-      return ROOT + "." + effect + ".passives." + passive;
+      return effectPath(effect) + ".passives." + passive;
    }
 
    /** Whether a passive is turned on. Missing keys count as on. */
    public static boolean passive(String effect, String passive) {
-      return cfg().getBoolean(passivePath(effect, passive) + ".enabled", true);
+      return bool(passivePath(effect, passive) + ".enabled", true);
    }
 
    public static double value(String effect, String passive, String key, double def) {
-      return cfg().getDouble(passivePath(effect, passive) + "." + key, def);
+      return num(passivePath(effect, passive) + "." + key, def);
    }
 
    public static int intValue(String effect, String passive, String key, int def) {
@@ -48,18 +92,18 @@ public final class Settings {
    // ----- particles -----
 
    public static boolean auraEnabled(String effect) {
-      return cfg().getBoolean(ROOT + "." + effect + ".particles.aura_enabled", true);
+      return bool(effectPath(effect) + ".particles.aura", true);
    }
 
    public static int auraAmount(String effect) {
-      return Math.max(0, cfg().getInt(ROOT + "." + effect + ".particles.aura_amount", 2));
+      return Math.max(0, (int)num(effectPath(effect) + ".particles.aura_amount", 2));
    }
 
    public static double abilityParticlePercent(String effect) {
-      return Math.max(0.0, cfg().getDouble(ROOT + "." + effect + ".particles.ability_percent", 100.0));
+      return Math.max(0.0, num(effectPath(effect) + ".particles.spark_percent", 100.0));
    }
 
-   /** Scales a spark/ability particle count by the effect's ability_percent setting. */
+   /** Scales a spark/ability particle count by the effect's spark_percent setting. */
    public static int particles(String effect, int base) {
       double percent = abilityParticlePercent(effect);
       if (base <= 0 || percent <= 0.0) {
@@ -79,10 +123,28 @@ public final class Settings {
       return whole + (Math.random() < factor - whole ? 1 : 0);
    }
 
-   // ----- rituals -----
+   // ----- crafting and rituals -----
+
+   public static String craftPath(String effect) {
+      return effectPath(effect) + ".craft";
+   }
+
+   public static String recipePath(String effect) {
+      return craftPath(effect) + ".recipe";
+   }
+
+   /** Normal crafts allowed after the augmented ones (-1 = unlimited). */
+   public static int normalCrafts(String effect) {
+      return (int)num(craftPath(effect) + ".normal_crafts", 3);
+   }
+
+   /** Augmented crafts allowed (-1 = unlimited). */
+   public static int augmentedCrafts(String effect) {
+      return (int)num(craftPath(effect) + ".augmented_crafts", 1);
+   }
 
    public static Set<Environment> ritualDimensions(String effect) {
-      List<String> names = cfg().getStringList(ROOT + "." + effect + ".ritual.dimensions");
+      List<String> names = cfg().getStringList(craftPath(effect) + ".dimensions");
       Set<Environment> result = EnumSet.noneOf(Environment.class);
 
       for (String name : names) {
@@ -101,8 +163,25 @@ public final class Settings {
 
    /** Ritual length in seconds. 0 means the effect is handed out instantly (only used for normal effects). */
    public static int ritualSeconds(String effect, boolean augmented) {
-      String key = augmented ? "augmented_seconds" : "normal_seconds";
-      return Math.max(0, cfg().getInt(ROOT + "." + effect + ".ritual." + key, augmented ? 600 : 0));
+      String key = augmented ? "augmented_ritual_seconds" : "normal_ritual_seconds";
+      return Math.max(0, (int)num(craftPath(effect) + "." + key, augmented ? 600 : 0));
+   }
+
+   /** Blocks from 0, 0 within which effects can be crafted (0 or less = anywhere). */
+   public static int maxCraftDistance() {
+      return (int)num("rituals.max_distance_from_0_0", 0);
+   }
+
+   /** Whether effects can be crafted at this location (horizontal distance from 0, 0 in its own world). */
+   public static boolean withinCraftDistance(Location loc) {
+      int max = maxCraftDistance();
+      if (max <= 0) {
+         return true;
+      } else {
+         double x = loc.getX();
+         double z = loc.getZ();
+         return x * x + z * z <= (double)max * max;
+      }
    }
 
    public static Environment dimensionFromName(String name) {

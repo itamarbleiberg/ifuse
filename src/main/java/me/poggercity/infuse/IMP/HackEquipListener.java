@@ -59,7 +59,7 @@ public class HackEquipListener implements Listener, CommandExecutor {
    }
 
    private boolean canEquipWithRestriction(Player player, String newHackName, String targetSlot) {
-      if (!Infuse.getInstance().getConfig().getBoolean("configs.only_allow_one_primary", false)) {
+      if (!Infuse.getInstance().getConfig().getBoolean("general.only_one_primary_effect", false)) {
          return true;
       } else {
          String slot1 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "1");
@@ -91,7 +91,7 @@ public class HackEquipListener implements Listener, CommandExecutor {
             return;
          }
 
-         int cooldownSeconds = Infuse.getInstance().getConfig().getInt("configs.drain_cooldown", 300);
+         int cooldownSeconds = Infuse.getInstance().getConfig().getInt("general.swap_cooldown", 60);
          CooldownManager.setCooldown(player.getUniqueId(), "unequip", cooldownSeconds);
          ItemStack item2 = hackMapping != null ? hackMapping.createItem() : null;
          this.hackManager.setHack(player.getUniqueId(), "1", hackName);
@@ -183,7 +183,7 @@ public class HackEquipListener implements Listener, CommandExecutor {
                player.sendMessage(var10001 + "You can swap your effect in " + ChatColor.BOLD + minutes + ":" + seconds);
                event.setCancelled(true);
             } else {
-               boolean cantunequip = Infuse.getInstance().getConfig().getBoolean("configs.cant_unequip_while_on_cooldown", true);
+               boolean cantunequip = Infuse.getInstance().getConfig().getBoolean("general.no_swap_while_spark_on_cooldown", false);
                if ((!cantunequip || !CooldownManager.hasAnyCooldown(player.getUniqueId())) && !CooldownManager.hasAnyEffect(player.getUniqueId())) {
                   HackMapping hackMapping = HackMapping.fromItem(item);
                   String hackNameFallback = null;
@@ -202,7 +202,7 @@ public class HackEquipListener implements Listener, CommandExecutor {
                   } else {
                      String hackName = hackMapping != null ? hackMapping.getHackName() : hackNameFallback;
                      boolean restrictionViolated = false;
-                     if (Infuse.getInstance().getConfig().getBoolean("configs.only_allow_one_primary", false)) {
+                     if (Infuse.getInstance().getConfig().getBoolean("general.only_one_primary_effect", false)) {
                         if (hasTier1 && hasTier2) {
                            if (!this.canEquipWithRestriction(player, hackName, "1")) {
                               restrictionViolated = true;
@@ -301,7 +301,7 @@ public class HackEquipListener implements Listener, CommandExecutor {
    }
 
    private void dropHackOnDeath(Player player, String type) {
-      int dropEffects = Infuse.getInstance().getConfig().getInt("configs.drop_effects_on_death", 1);
+      int dropEffects = Infuse.getInstance().getConfig().getInt("general.drop_effects_on_death", 1);
       if (dropEffects > 0) {
          if (dropEffects >= 2) {
             this.dropSingleHack(player, "1");

@@ -221,12 +221,12 @@ public class Heart implements Listener {
       if (!CooldownManager.isOnCooldown(playerUUID, HEALTH_KEY)) {
          particles.spawnEffect(KEY, player, Color.fromRGB(252, 0, 70));
          particles.spawnHearts(KEY, player);
-         int duration = Infuse.getInstance().getConfig().getInt("durations.heart_spark", 60);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.heart.spark.duration", 60);
          CooldownManager.setDuration(playerUUID, HEALTH_KEY, duration);
          // 20 hearts while the spark lasts; tickMaxHealth takes them away again when it ends.
          this.updateMaxHealth(player);
          player.setHealth(player.getAttribute(Attribute.MAX_HEALTH).getValue());
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.heart_spark", 120);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.heart.spark.cooldown", 120);
          String h1 = Infuse.getInstance().getHackManager().getHack(playerUUID, "1");
          String h2 = Infuse.getInstance().getHackManager().getHack(playerUUID, "2");
          boolean isAugmented = this.hasHeartEffectEquipped(player)

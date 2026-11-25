@@ -70,8 +70,8 @@ public class Regen implements Listener {
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "regen")) {
-         int duration = Infuse.getInstance().getConfig().getInt("durations.regen_spark", 30);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.regen_spark", 60);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.regen.spark.duration", 30);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.regen.spark.cooldown", 60);
          particles.spawnEffect("regen", player, Color.fromRGB(255, 3, 239));
          player.playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_PREPARE_MIRROR, 1.0F, 1.0F);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null

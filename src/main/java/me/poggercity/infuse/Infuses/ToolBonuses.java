@@ -6,7 +6,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 import me.poggercity.infuse.Managers.AttributeBonus;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
@@ -41,7 +40,6 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
@@ -52,18 +50,15 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 /**
- * Enchantment bonuses from passives: Haste (Efficiency 10, Fortune 5, Unbreaking 5 on tools), Emerald (Looting 5 on
- * swords) and the Apophis spark (Efficiency/Fortune on tools, Sharpness/Looting on swords and axes).
+ * Enchantment bonuses that only last while the player has the effect: Emerald (Looting 5 on swords) and the Apophis
+ * spark (Efficiency/Fortune on tools, Sharpness/Looting on swords and axes). Haste is different on purpose: it puts
+ * real enchantments on the tool, which the tool keeps (see Haste.enchantTool).
  *
- * Infuse 2.4 wrote these enchantments onto the held item. They stayed on the item forever: after the effect was
- * drained, after the item was given or sold to another player, and Apophis even stripped enchantments the item had
- * before. The bonuses are now applied only while the player has the effect, without changing the item:
- * Efficiency is a mining-efficiency attribute bonus, Fortune and Unbreaking are applied when the block drops or the
- * item takes damage, Sharpness adds damage on hit. Looting is the one enchantment the game only reads from the item
- * itself, so it is put on the weapon only for the killing hit and taken off again right after the loot is rolled.
+ * These bonuses don't change the item: Efficiency is a mining-efficiency attribute bonus, Fortune is applied when the
+ * block drops, Sharpness adds damage on hit. Looting is the one enchantment the game only reads from the item itself,
+ * so it is put on the weapon only for the killing hit and taken off again right after the loot is rolled.
  */
 public class ToolBonuses implements Listener {
-   private static final Set<Material> MINING_TOOLS = EnumSet.noneOf(Material.class);
    private static final Set<Material> FORTUNE_BLOCKS = EnumSet.of(
       Material.NETHER_QUARTZ_ORE,
       Material.GRAVEL,
@@ -87,15 +82,6 @@ public class ToolBonuses implements Listener {
    // Players holding an item with temporary Looting (normally empty, at most for one tick)
    private final Set<UUID> pendingLooting = new HashSet<>();
 
-   static {
-      for (Material m : Material.values()) {
-         String n = m.name();
-         if (!m.isLegacy() && (n.endsWith("_PICKAXE") || n.endsWith("_AXE") || n.endsWith("_SHOVEL") || n.endsWith("_HOE"))) {
-            MINING_TOOLS.add(m);
-         }
-      }
-   }
-
    public ToolBonuses(Plugin plugin) {
       this.plugin = plugin;
       this.efficiencyKey = new NamespacedKey(plugin, "tool_bonus_efficiency");
@@ -117,7 +103,7 @@ public class ToolBonuses implements Listener {
    }
 
    private static boolean worldDisabled(Player player) {
-      return Infuse.getInstance().getConfig().getStringList("configs.disabled_worlds").stream().anyMatch(w -> w.equalsIgnoreCase(player.getWorld().getName()));
+      return Infuse.getInstance().getConfig().getStringList("general.disabled_worlds").stream().anyMatch(w -> w.equalsIgnoreCase(player.getWorld().getName()));
    }
 
    private static boolean isSword(Material m) {
@@ -126,10 +112,6 @@ public class ToolBonuses implements Listener {
 
    private static boolean isAxe(Material m) {
       return m.name().endsWith("_AXE");
-   }
-
-   private static boolean isMiningTool(Material m) {
-      return MINING_TOOLS.contains(m);
    }
 
    private static boolean apophisSpark(Player player) {
@@ -145,16 +127,7 @@ public class ToolBonuses implements Listener {
       } else {
          Material type = item.getType();
          int level = 0;
-         if (isMiningTool(type) && hasEffect(player, "Haste") && Settings.passive("haste", "tool_enchants")) {
-            if (enchantment.equals(Enchantment.EFFICIENCY)) {
-               level = Math.max(level, Settings.intValue("haste", "tool_enchants", "efficiency", 10));
-            } else if (enchantment.equals(Enchantment.FORTUNE)) {
-               level = Math.max(level, Settings.intValue("haste", "tool_enchants", "fortune", 5));
-            } else if (enchantment.equals(Enchantment.UNBREAKING)) {
-               level = Math.max(level, Settings.intValue("haste", "tool_enchants", "unbreaking", 5));
-            }
-         }
-
+         // Haste is not here: it puts real enchantments on the tool (Haste.enchantTool), which the tool keeps.
          if (isSword(type) && enchantment.equals(Enchantment.LOOTING) && hasEffect(player, "Emerald") && Settings.passive("emerald", "looting")) {
             level = Math.max(level, Settings.intValue("emerald", "looting", "level", 5));
          }
@@ -317,27 +290,6 @@ public class ToolBonuses implements Listener {
                items.add(entity);
             }
          }
-      }
-   }
-
-   // ----- Unbreaking -----
-
-   @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-   public void onItemDamage(PlayerItemDamageEvent event) {
-      ItemStack item = event.getItem();
-      int own = item.getEnchantmentLevel(Enchantment.UNBREAKING);
-      int bonus = this.bonusLevel(event.getPlayer(), item, Enchantment.UNBREAKING);
-      if (bonus > own && isMiningTool(item.getType())) {
-         // Same rule as vanilla Unbreaking for tools: each point of damage is taken with chance 1 / (level + 1).
-         int taken = 0;
-
-         for (int i = 0; i < event.getOriginalDamage(); i++) {
-            if (ThreadLocalRandom.current().nextInt(bonus + 1) == 0) {
-               taken++;
-            }
-         }
-
-         event.setDamage(taken);
       }
    }
 

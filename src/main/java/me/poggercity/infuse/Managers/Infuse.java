@@ -93,8 +93,11 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    public void onEnable() {
       instance = this;
       this.saveDefaultConfig();
-      this.getConfig().options().copyDefaults(true);
-      this.migrateLegacyConfig();
+      // Older config.yml files (2.4 / 2.5 layout) are converted to the current layout, with a backup of the old file.
+      // Settings missing from config.yml are added with their default values. copyDefaults stays off: it made sections
+      // like a recipe's ingredients list the jar's keys too, so a changed recipe got the old letters mixed in.
+      ConfigMigration.run(this);
+      this.appliedSwapHandsDefault = this.getConfig().getBoolean("general.sparks_on_swap_hands_key", false);
 
       try {
          Effects.init(this);
@@ -124,119 +127,27 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       this.getLogger().info("Infuse Plugin has been enabled!");
    }
 
-   private void migrateLegacyConfig() {
-      FileConfiguration cfg = this.getConfig();
-      boolean changed = false;
-      String[] rootSections = new String[]{"augments", "effects", "durations", "cooldowns", "damage", "radius"};
-
-      for (String sec : rootSections) {
-         String legacy = "configs." + sec;
-         if (cfg.isConfigurationSection(legacy) && !cfg.isConfigurationSection(sec)) {
-            ConfigurationSection from = cfg.getConfigurationSection(legacy);
-            if (from != null) {
-               cfg.createSection(sec, from.getValues(true));
-               changed = true;
-               this.getLogger().info("[config] migrated '" + legacy + "' -> '" + sec + "'");
-            }
-         }
-      }
-
-      if (cfg.isConfigurationSection("apophis") && !cfg.isConfigurationSection("recipes.apophis")) {
-         ConfigurationSection apo = cfg.getConfigurationSection("apophis");
-         if (apo != null) {
-            cfg.createSection("recipes.apophis", apo.getValues(true));
-            changed = true;
-            this.getLogger().info("[config] migrated 'apophis' -> 'recipes.apophis'");
-         }
-      }
-
-      changed |= this.migrateToEffectSettings(cfg);
-      // contains(path, true) ignores the defaults from the jar (with copyDefaults on, isSet() counts them too).
-      if (!cfg.contains(Settings.ROOT, true)) {
-         // Older config.yml without the per-effect section: write the defaults so they can be edited in the file.
-         changed = true;
-      }
-
-      if (changed) {
-         this.saveConfig();
-      }
-   }
-
-   // Legacy keys from Infuse 2.4 that now live under effect_settings.<effect>. A value the admin set in the old place
-   // is copied to the new place (unless the new place is already set) and the old key is removed.
-   private static final String[][] LEGACY_KEYS = new String[][]{
-      {"configs.haste_enchant", "haste.passives.tool_enchants.enabled", "apophis.passives.haste.enabled"},
-      {"configs.emerald_enchant", "emerald.passives.looting.enabled", "emerald.passives.luck.enabled",
-         "emerald.passives.hero_of_the_village.enabled", "apophis.passives.spark_tool_bonus.enabled"},
-      {"configs.chain_lightning", "thunder.passives.chain_lightning.enabled"},
-      {"configs.fire_lava_fly", "fire.passives.lava_flight.enabled"},
-      {"configs.apophis_lava_fly", "apophis.passives.lava_flight.enabled"},
-      {"damage.feather_mace", "feather.passives.fall_attack.multiplier"},
-      {"damage.increasing_fire_damage_multiplier", "fire.passives.fire_damage_boost.step"},
-      {"damage.max_fire_damage_multiplier", "fire.passives.fire_damage_boost.max"},
-      {"damage.ocean_drown", "ocean.passives.drowning_aura.damage"},
-      {"radius.ocean_drown", "ocean.passives.drowning_aura.radius"},
-      {"damage.trident_pull_strength", "ocean.passives.trident_pull.strength"},
-      {"damage.thunder_hearts", "thunder.passives.smite_on_hit.hearts"},
-      {"radius.ender", "ender.passives.glowing.radius"},
-      {"cooldowns.ender_dragon_breath", "ender.passives.dragon_fireball.cooldown_seconds"},
-      {"durations.dragon_curse_duration", "ender.passives.curse.seconds"}
-   };
    public static final String[] EFFECT_KEYS = new String[]{
       "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis"
    };
 
-   private boolean migrateToEffectSettings(FileConfiguration cfg) {
-      boolean changed = false;
-
-      for (String[] mapping : LEGACY_KEYS) {
-         if (cfg.contains(mapping[0], true)) {
-            Object value = cfg.get(mapping[0]);
-
-            for (int i = 1; i < mapping.length; i++) {
-               String target = Settings.ROOT + "." + mapping[i];
-               if (!cfg.contains(target, true)) {
-                  cfg.set(target, value);
-               }
-            }
-
-            cfg.set(mapping[0], null);
-            changed = true;
-            this.getLogger().info("[config] moved '" + mapping[0] + "' to effect_settings");
-         }
-      }
-
-      if (cfg.contains("durations.ritual_duration", true)) {
-         int seconds = cfg.getInt("durations.ritual_duration");
-
-         for (String effect : EFFECT_KEYS) {
-            String target = Settings.ROOT + "." + effect + ".ritual.augmented_seconds";
-            if (!cfg.contains(target, true)) {
-               cfg.set(target, seconds);
-            }
-         }
-
-         cfg.set("durations.ritual_duration", null);
-         changed = true;
-         this.getLogger().info("[config] moved 'durations.ritual_duration' to effect_settings.<effect>.ritual.augmented_seconds");
-      }
-
-      return changed;
-   }
 
    @EventHandler
    public void onPlayerJoin(PlayerJoinEvent event) {
       Player player = event.getPlayer();
       Location anchor = player.getLocation();
-      Bukkit.getRegionScheduler().runDelayed(this, anchor, task -> {
-         if (this.getConfig().getBoolean("configs.default_offhand_for_ability", true)) {
-            if (!player.hasPermission("ability.use")) {
-               player.addAttachment(this, "ability.use", true);
-            }
-         } else if (player.hasPermission("ability.use")) {
-            player.addAttachment(this, "ability.use", false);
+      Bukkit.getRegionScheduler().runDelayed(this, anchor, task -> this.applySwapHandsDefault(player), 20L);
+   }
+
+   // general.sparks_on_swap_hands_key: whether the swap-hands key uses sparks (players can change it with /controls).
+   private void applySwapHandsDefault(Player player) {
+      if (this.getConfig().getBoolean("general.sparks_on_swap_hands_key", false)) {
+         if (!player.hasPermission("ability.use")) {
+            player.addAttachment(this, "ability.use", true);
          }
-      }, 20L);
+      } else if (player.hasPermission("ability.use")) {
+         player.addAttachment(this, "ability.use", false);
+      }
    }
 
    @EventHandler
@@ -326,7 +237,12 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       }
 
       if (this.getCommand("infuseconfig") != null) {
-         this.getCommand("infuseconfig").setExecutor(new ConfigDialog(this));
+         RecipeEditor recipeEditor = new RecipeEditor(this);
+         ConfigDialog configDialog = new ConfigDialog(this, recipeEditor);
+         recipeEditor.setDialog(configDialog);
+         Bukkit.getPluginManager().registerEvents(recipeEditor, this);
+         this.getCommand("infuseconfig").setExecutor(configDialog);
+         this.getCommand("infuseconfig").setTabCompleter(configDialog);
       }
 
       if (this.getCommand("controls") != null) {
@@ -365,9 +281,9 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    @EventHandler
    public void onJoin(PlayerJoinEvent event) {
       Player player = event.getPlayer();
-      boolean randomEffectOnJoin = getInstance().getConfig().getBoolean("configs.random_effect_on_join", false);
-      boolean randomPrimaryOnJoin = getInstance().getConfig().getBoolean("configs.random_primary_effect_on_join", false);
-      boolean randomSecondaryOnJoin = getInstance().getConfig().getBoolean("configs.random_secondary_effect_on_join", false);
+      boolean randomEffectOnJoin = getInstance().getConfig().getBoolean("general.random_effect_on_first_join", false);
+      boolean randomPrimaryOnJoin = getInstance().getConfig().getBoolean("general.random_primary_effect_on_first_join", false);
+      boolean randomSecondaryOnJoin = getInstance().getConfig().getBoolean("general.random_secondary_effect_on_first_join", false);
       Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> {
          if (!player.hasPlayedBefore()) {
             if (randomEffectOnJoin) {
@@ -383,8 +299,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
 
    public void roll(Player player) {
       UUID uuid = player.getUniqueId();
-      boolean allowEnder = this.getConfig().getBoolean("configs.roll_enable_ender", true);
-      boolean allowApophis = this.getConfig().getBoolean("configs.roll_enable_apophis", true);
+      boolean allowEnder = this.getConfig().getBoolean("general.random_effect_can_be_ender", true);
+      boolean allowApophis = this.getConfig().getBoolean("general.random_effect_can_be_apophis", true);
       List<HackMapping> allHacks = Arrays.stream(HackMapping.values()).filter(hack -> {
          String n = hack.getHackName().toLowerCase();
          if (n.contains("augmented")) {
@@ -403,8 +319,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
 
    public void rollPrimary(Player player) {
       UUID uuid = player.getUniqueId();
-      boolean allowEnder = this.getConfig().getBoolean("configs.roll_enable_ender", true);
-      boolean allowApophis = this.getConfig().getBoolean("configs.roll_enable_apophis", true);
+      boolean allowEnder = this.getConfig().getBoolean("general.random_effect_can_be_ender", true);
+      boolean allowApophis = this.getConfig().getBoolean("general.random_effect_can_be_apophis", true);
       List<HackMapping> primaryHacks = Arrays.stream(HackMapping.values())
          .filter(
             hack -> {
@@ -561,9 +477,27 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       }
    }
 
+   // The general.sparks_on_swap_hands_key value online players last got.
+   private Boolean appliedSwapHandsDefault;
+
    public void reloadConfigFiles() {
+      // A config.yml with a YAML error is not loaded: the settings in use stay as they were until the file is fixed
+      // (loading it would have put every setting back to its default).
+      if (!ConfigMigration.readable(this)) {
+         return;
+      }
+
       this.reloadConfig();
-      this.migrateLegacyConfig();
+      ConfigMigration.run(this);
+      // Changed in the editor or the file: online players get the new default right away (otherwise only at join).
+      boolean swapKey = this.getConfig().getBoolean("general.sparks_on_swap_hands_key", false);
+      if (this.appliedSwapHandsDefault == null || swapKey != this.appliedSwapHandsDefault) {
+         for (Player p : Bukkit.getOnlinePlayers()) {
+            this.applySwapHandsDefault(p);
+         }
+      }
+
+      this.appliedSwapHandsDefault = swapKey;
       if (this.recipeManager != null) {
          this.recipeManager.reloadRecipes();
       }
@@ -573,6 +507,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
 
    public void onDisable() {
       this.getLogger().info("Infuse Plugin is disabling...");
+      // The recipe editor's grid only holds copies; it must not stay open without its listener.
+      RecipeEditor.closeAll();
       if (this.recipeManager != null) {
          // Saves running rituals so they continue after a restart, and removes their beam entities.
          this.recipeManager.shutdown();
@@ -606,6 +542,10 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
 
    public PlayerHackManager getHackManager() {
       return this.hackManager2;
+   }
+
+   public InfuseRecipeManager getRecipeManager() {
+      return this.recipeManager;
    }
 
    // One instance per effect. Abilities and Apophis used to create their own copies, so state kept by the copies
@@ -689,14 +629,12 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    }
 
    public boolean isApophisEnabled() {
-      return this.getConfig().getBoolean("configs.apophis_enabled", true);
+      return this.getConfig().getBoolean("general.apophis_enabled", true);
    }
 
    private void registerEvents() {
-      boolean apophisEnabled = this.isApophisEnabled();
-      if (apophisEnabled) {
-         Bukkit.getPluginManager().registerEvents(this.apophis, this);
-      }
+      // Always registered; general.apophis_enabled is checked when Apophis does something, so it can be changed live.
+      Bukkit.getPluginManager().registerEvents(this.apophis, this);
 
       this.passive = new Passive();
       Bukkit.getPluginManager().registerEvents(this, this);
@@ -719,8 +657,15 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       Bukkit.getPluginManager().registerEvents(this.toolBonuses, this);
       Bukkit.getPluginManager().registerEvents(this.abilitiesHandler, this);
       Bukkit.getPluginManager().registerEvents(new HackRerollListener(this, new HackEquipListener()), this);
-      int startdelay = getInstance().getConfig().getInt("configs.event_update_time", 1);
+      // Runs every tick and does the work every general.passive_update_ticks ticks, so changing that setting applies
+      // right away (it used to be read once at startup).
+      long[] passiveTick = new long[]{0L};
       Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+         int every = Math.max(1, this.getConfig().getInt("general.passive_update_ticks", 1));
+         if (passiveTick[0]++ % every != 0L) {
+            return;
+         }
+
          if (this.fire != null) {
             this.fire.applyFireEffects();
          }
@@ -753,10 +698,13 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
             this.dragon.startTrackingTask();
          }
 
-         if (this.apophis != null && apophisEnabled) {
+         if (this.apophis != null && this.isApophisEnabled()) {
             this.apophis.applyApophisEffects();
+         } else if (this.apophis != null) {
+            // Turned off while the server runs: take away the lava flight and Regeneration Apophis was keeping on.
+            this.apophis.disableAll();
          }
-      }, 1L, startdelay);
+      }, 1L, 1L);
       // Attribute bonuses run every tick regardless of event_update_time, so they are removed the moment they stop
       // applying (for example Ocean's water hearts when leaving water).
       Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {

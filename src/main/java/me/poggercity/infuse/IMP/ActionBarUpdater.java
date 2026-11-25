@@ -14,13 +14,19 @@ import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 public class ActionBarUpdater {
-   int startdelay = Infuse.getInstance().getConfig().getInt("configs.action_bar_update_time", 1);
+   private long tick;
    private final PlayerHackManager hackManager = new PlayerHackManager();
    private final Set<UUID> playersWithActiveEffects = new HashSet<>();
    private final Map<String, String> hackKeys = new HashMap<>();
 
    public void start() {
-      Bukkit.getGlobalRegionScheduler().runAtFixedRate(Infuse.getInstance(), task -> this.updateAllPlayers(), 1L, this.startdelay);
+      // Every tick, doing the work every general.action_bar_update_ticks ticks (changes apply without a restart).
+      Bukkit.getGlobalRegionScheduler().runAtFixedRate(Infuse.getInstance(), task -> {
+         int every = Math.max(1, Infuse.getInstance().getConfig().getInt("general.action_bar_update_ticks", 1));
+         if (this.tick++ % every == 0L) {
+            this.updateAllPlayers();
+         }
+      }, 1L, 1L);
    }
 
    private void updateAllPlayers() {

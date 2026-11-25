@@ -52,11 +52,11 @@ public class Fire implements Listener {
 
    // Read on every use so config changes apply without a restart (these were fixed when the plugin started).
    private static int sparkDuration() {
-      return Infuse.getInstance().getConfig().getInt("durations.fire_spark", 4);
+      return Infuse.getInstance().getConfig().getInt("effects.fire.spark.duration", 4);
    }
 
    private static double sparkRadius() {
-      return Infuse.getInstance().getConfig().getDouble("radius.fire", 5.0);
+      return Infuse.getInstance().getConfig().getDouble("effects.fire.spark.radius", 5.0);
    }
 
    private static boolean lavaFlyEnabled() {
@@ -156,7 +156,7 @@ public class Fire implements Listener {
    private boolean worldDisabled(Player player) {
       return Infuse.getInstance()
          .getConfig()
-         .getStringList("configs.disabled_worlds")
+         .getStringList("general.disabled_worlds")
          .stream()
          .map(String::toLowerCase)
          .anyMatch(w -> w.equalsIgnoreCase(player.getWorld().getName()));
@@ -203,9 +203,10 @@ public class Fire implements Listener {
             Material blockType = event.getBlock().getType();
             ItemStack drop = null;
             int amount = 1;
-            // Includes Haste's Fortune bonus (that used to be written onto the pickaxe).
+            // The pickaxe's Fortune (and the Apophis spark bonus). Fortune never works on ancient debris, as in vanilla:
+            // with Haste's Fortune 5 this used to turn one ancient debris into up to 7 netherite scrap.
             int fortuneLevel = Infuse.getInstance().getToolBonuses().effectiveLevel(player, item, Enchantment.FORTUNE);
-            if (fortuneLevel > 0) {
+            if (fortuneLevel > 0 && blockType != Material.ANCIENT_DEBRIS) {
                amount += ThreadLocalRandom.current().nextInt(1, fortuneLevel + 2);
             }
 
@@ -447,7 +448,7 @@ public class Fire implements Listener {
          // effect, which clashed with Feather's own Bad Luck marker).
          CooldownManager.setDuration(playerUUID, "fire_spark", duration + 1);
          this.spawnSparkEffect(player, duration, radius);
-         int var141 = Infuse.getInstance().getConfig().getInt("cooldowns.fire_spark", 60);
+         int var141 = Infuse.getInstance().getConfig().getInt("effects.fire.spark.cooldown", 60);
          boolean isAug = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented fire")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null
@@ -507,7 +508,7 @@ public class Fire implements Listener {
 
    private void startDarkRedDustEffect(Location startLoc, Player caster, double radius) {
       World world = startLoc.getWorld();
-      double launch = Infuse.getInstance().getConfig().getDouble("damage.fire_launch_strength", 4.0);
+      double launch = Infuse.getInstance().getConfig().getDouble("effects.fire.spark.launch_strength", 4.0);
 
       for (Player target : world.getPlayers()) {
          if (!target.equals(caster)

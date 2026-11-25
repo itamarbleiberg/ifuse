@@ -110,11 +110,11 @@ public class Abilities implements CommandExecutor, Listener {
 
    private void activateAbility(Player player, String abilityName) {
       String worldName = player.getWorld().getName().toLowerCase();
-      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("configs.disabled_worlds");
+      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("general.disabled_worlds");
       if (!disabledWorlds.stream().map(String::toLowerCase).anyMatch(w -> w.equals(worldName)) && abilityName.contains("Effect")) {
          boolean isAugmented = abilityName.startsWith("Augmented ");
          if (abilityName.equals("Apophis Effect") || abilityName.equals("Augmented Apophis Effect")) {
-            if (CooldownManager.isOnCooldown(player.getUniqueId(), "apophis")) {
+            if (CooldownManager.isOnCooldown(player.getUniqueId(), "apophis") || !Infuse.getInstance().isApophisEnabled()) {
                return;
             }
 

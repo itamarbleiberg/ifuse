@@ -62,9 +62,9 @@ public class UnequipCommand implements CommandExecutor, Listener {
                player.sendMessage(var10001 + "You can drain your effect in " + ChatColor.BOLD + minutes + ":" + seconds);
                return true;
             } else {
-               boolean cantunequip = this.plugin.getConfig().getBoolean("configs.cant_unequip_while_on_cooldown", false);
+               boolean cantunequip = this.plugin.getConfig().getBoolean("general.no_swap_while_spark_on_cooldown", false);
                if ((!cantunequip || !CooldownManager.hasAnyCooldown(player.getUniqueId())) && !CooldownManager.hasAnyEffect(player.getUniqueId())) {
-                  int cooldownSeconds = this.plugin.getConfig().getInt("configs.drain_cooldown", 300);
+                  int cooldownSeconds = this.plugin.getConfig().getInt("general.swap_cooldown", 60);
                   CooldownManager.setCooldown(player.getUniqueId(), "unequip", cooldownSeconds);
                   this.hackManager.removeHack(player.getUniqueId(), hackType);
                   player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1.0F, 1.2F);

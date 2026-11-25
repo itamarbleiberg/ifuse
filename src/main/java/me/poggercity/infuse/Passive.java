@@ -9,7 +9,7 @@ import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffectType;
 
-/** Aura particles around players with effects (every 19 ticks). Amount per effect: effect_settings.&lt;effect&gt;.particles. */
+/** Aura particles around players with effects (every 19 ticks). Amount per effect: effects.&lt;effect&gt;.particles. */
 public class Passive {
    public void startTask() {
       Bukkit.getGlobalRegionScheduler().runAtFixedRate(Infuse.getInstance(), task -> {

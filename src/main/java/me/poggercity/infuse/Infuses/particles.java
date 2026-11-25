@@ -9,7 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 public class particles {
-   /** Spark activation burst, scaled by effect_settings.&lt;effect&gt;.particles.ability_percent. */
+   /** Spark activation burst, scaled by effects.&lt;effect&gt;.particles.spark_percent. */
    public static void spawnEffect(String effect, Player player, Color color) {
       Location base = player.getLocation().add(0.0, 0.0, 0.0);
       int count = Settings.particles(effect, 30);

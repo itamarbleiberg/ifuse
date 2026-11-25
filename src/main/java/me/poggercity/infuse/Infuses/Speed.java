@@ -119,7 +119,7 @@ public class Speed implements Listener {
       if (!CooldownManager.isOnCooldown(playerUUID, "speed")) {
          particles.spawnEffect(KEY, player, Color.fromRGB(209, 164, 75));
          Vector direction = player.getEyeLocation().getDirection().normalize();
-         double dashStrength = Infuse.getInstance().getConfig().getDouble("damage.speed_dash_strength", 1.0);
+         double dashStrength = Infuse.getInstance().getConfig().getDouble("effects.speed.spark.dash_strength", 1.0);
          Vector dashVector = direction.clone().multiply(dashStrength);
          player.setVelocity(dashVector);
          DustOptions dustOptions = new DustOptions(Color.fromRGB(230, 220, 170), 1.5F);
@@ -156,7 +156,7 @@ public class Speed implements Listener {
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented speed")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "2")).toLowerCase().contains("augmented speed");
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.speed_spark", 20);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.speed.spark.cooldown", 20);
          int cooldown = isAugmented ? configcooldown / 2 + 1 : configcooldown + 1;
          CooldownManager.setCooldown(playerUUID, "speed", cooldown);
       }

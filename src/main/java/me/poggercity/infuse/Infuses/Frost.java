@@ -124,10 +124,10 @@ public class Frost implements Listener {
          }
 
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
-         int duration = Infuse.getInstance().getConfig().getInt("durations.frost_spark", 10);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.frost.spark.duration", 10);
          Location anchor = caster.getLocation();
          CooldownManager.setDuration(playerUUID, "frost", duration);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.frost_spark", 90);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.frost.spark.cooldown", 90);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented frost")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null
@@ -137,7 +137,7 @@ public class Frost implements Listener {
          Location center = caster.getLocation();
          World world = caster.getWorld();
          Set<Player> affectedPlayers = new HashSet<>();
-         double radius = Infuse.getInstance().getConfig().getDouble("radius.frost", 5.0);
+         double radius = Infuse.getInstance().getConfig().getDouble("effects.frost.spark.radius", 5.0);
 
          for (Player player : Bukkit.getOnlinePlayers()) {
             // Trust is checked the same way as every other ability: whether the caster trusts the target (this was the

@@ -67,7 +67,7 @@ public class Ender implements Listener {
    }
 
    public void startTrackingTask() {
-      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("configs.disabled_worlds").stream().map(String::toLowerCase).toList();
+      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("general.disabled_worlds").stream().map(String::toLowerCase).toList();
       if (!Settings.passive(KEY, "glowing")) {
          return;
       }
@@ -283,7 +283,7 @@ public class Ender implements Listener {
          }
 
          CooldownManager.setDuration(playerUUID, "ender", 1L);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.ender_spark", 10);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.ender.spark.cooldown", 10);
          CooldownManager.setCooldown(playerUUID, "ender", configcooldown + 2L);
          player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_TELEPORT, 1.0F, 1.0F);
 
@@ -305,7 +305,7 @@ public class Ender implements Listener {
 
                      CooldownManager.resetAllCooldowns(targetUUID);
                      this.applyCursed(targetPlayer);
-                     double damage = Infuse.getInstance().getConfig().getDouble("damage.dragon", 4.0);
+                     double damage = Infuse.getInstance().getConfig().getDouble("effects.ender.spark.damage", 4.0);
                      targetPlayer.damage(damage);
 
                      for (Entry<String, Long> entry : savedCooldowns.entrySet()) {

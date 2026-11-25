@@ -66,37 +66,44 @@ public class Ocean implements Listener {
    private static boolean worldDisabled(Player player) {
       return Infuse.getInstance()
          .getConfig()
-         .getStringList("configs.disabled_worlds")
+         .getStringList("general.disabled_worlds")
          .stream()
          .anyMatch(w -> w.equalsIgnoreCase(player.getWorld().getName()));
    }
 
    /**
-    * Runs every tick. While an Ocean player is in water they get +extra_hearts max health and Speed (+20% movement
-    * speed per level). Both are keyed transient modifiers that are removed the same tick the player is no longer in
-    * water, no longer has Ocean, dies, is in a disabled world or the passive is turned off. Nothing is healed when the
-    * hearts are added, so jumping in and out of water can't be used to heal.
+    * Runs every tick. While an Ocean player is in water they get +extra_hearts max health (a keyed transient modifier)
+    * and Regeneration. Both are removed the same tick the player is no longer in water, no longer has Ocean, dies, is
+    * in a disabled world or the passive is turned off. Nothing is healed when the hearts are added, so jumping in and
+    * out of water can't be used to heal.
     */
    public void tickAttributes() {
       boolean bonusEnabled = Settings.passive(KEY, "water_bonus");
       boolean swimEnabled = Settings.passive(KEY, "swim_faster");
       double extraHealth = Math.max(0.0, Settings.value(KEY, "water_bonus", "extra_hearts", 2.0)) * 2.0;
-      double speedBonus = Math.max(0, Settings.intValue(KEY, "water_bonus", "speed_level", 1)) * 0.2;
+      int regenLevel = Math.min(5, Settings.intValue(KEY, "water_bonus", "regeneration_level", 1));
 
       for (Player p : Bukkit.getOnlinePlayers()) {
          boolean ocean = !p.isDead() && this.hasOceanEquipped(p) && !worldDisabled(p);
          boolean inWater = ocean && bonusEnabled && p.isInWater();
          AttributeBonus.set(p, Attribute.MAX_HEALTH, this.waterHealthKey, inWater ? extraHealth : 0.0, Operation.ADD_NUMBER);
-         AttributeBonus.set(p, Attribute.MOVEMENT_SPEED, this.waterSpeedKey, inWater ? speedBonus : 0.0, Operation.MULTIPLY_SCALAR_1);
+         // 2.5 gave Speed in water with this modifier. It isn't used any more; this only clears it from players who
+         // still had it when the plugin was swapped without a restart.
+         AttributeBonus.remove(p, Attribute.MOVEMENT_SPEED, this.waterSpeedKey);
          // "Swim faster": same as Depth Strider III while Ocean is equipped.
          AttributeBonus.set(p, Attribute.WATER_MOVEMENT_EFFICIENCY, this.swimKey, ocean && swimEnabled ? 1.0 : 0.0, Operation.ADD_NUMBER);
+         this.waterRegen.tick(p, inWater && regenLevel > 0, regenLevel - 1);
       }
    }
+
+   // Regeneration while in water (see ManagedRegen: it really heals, and only Ocean's own effect is ever removed).
+   private final ManagedRegen waterRegen = new ManagedRegen();
 
    public void removeBonuses(Player p) {
       AttributeBonus.remove(p, Attribute.MAX_HEALTH, this.waterHealthKey);
       AttributeBonus.remove(p, Attribute.MOVEMENT_SPEED, this.waterSpeedKey);
       AttributeBonus.remove(p, Attribute.WATER_MOVEMENT_EFFICIENCY, this.swimKey);
+      this.waterRegen.remove(p);
    }
 
    @EventHandler(priority = EventPriority.MONITOR)
@@ -129,7 +136,7 @@ public class Ocean implements Listener {
       boolean aura = Settings.passive(KEY, "drowning_aura");
       double drownRadius = Settings.value(KEY, "drowning_aura", "radius", 5.0);
       double damage = Settings.value(KEY, "drowning_aura", "damage", 4.0);
-      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("configs.disabled_worlds").stream().map(String::toLowerCase).toList();
+      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("general.disabled_worlds").stream().map(String::toLowerCase).toList();
 
       // Runs directly on the server thread. It used to be deferred to the next tick while affectedPlayers was read
       // right away, which restarted and cancelled the air-regeneration task every tick.
@@ -344,8 +351,8 @@ public class Ocean implements Listener {
       if (!CooldownManager.isOnCooldown(playerUUID, "ocean")) {
          particles.spawnEffect(KEY, caster, Color.fromRGB(0, 90, 252));
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
-         double wallRadius = Infuse.getInstance().getConfig().getDouble("radius.ocean", 15.0);
-         int duration = Infuse.getInstance().getConfig().getInt("durations.ocean_spark", 5);
+         double wallRadius = Infuse.getInstance().getConfig().getDouble("effects.ocean.spark.radius", 15.0);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.ocean.spark.duration", 5);
          long durationTicks = duration * 20L;
          World world = caster.getWorld();
          Location anchor = caster.getLocation();
@@ -423,7 +430,7 @@ public class Ocean implements Listener {
             }
          }, 1L, 1L);
          CooldownManager.setDuration(playerUUID, "ocean", duration);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.ocean_spark", 90);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.ocean.spark.cooldown", 90);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented ocean")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null

@@ -112,13 +112,13 @@ public class Thunder implements Listener {
    public void activateSpark(Player caster) {
       UUID playerUUID = caster.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "thunder")) {
-         int duration = Infuse.getInstance().getConfig().getInt("durations.thunder_spark", 10);
-         double radius = Infuse.getInstance().getConfig().getDouble("radius.thunder", 7.0);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.thunder.spark.duration", 10);
+         double radius = Infuse.getInstance().getConfig().getDouble("effects.thunder.spark.radius", 7.0);
          particles.spawnEffect("thunder", caster, Color.fromRGB(252, 237, 0));
          caster.playSound(caster.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
          this.activeSparks.add(playerUUID);
          CooldownManager.setDuration(playerUUID, "thunder", duration);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.thunder_spark", 90);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.thunder.spark.cooldown", 90);
          boolean isAugmented = this.isAugmentedThunder(caster);
          int cooldown = isAugmented ? configcooldown / 2 + duration : configcooldown + duration;
          CooldownManager.setCooldown(playerUUID, "thunder", cooldown);

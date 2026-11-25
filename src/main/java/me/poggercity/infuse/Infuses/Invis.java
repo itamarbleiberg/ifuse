@@ -185,8 +185,8 @@ public class Invis implements Listener {
          World world = caster.getWorld();
          world.playSound(caster.getLocation(), Sound.ENTITY_WITHER_SHOOT, 0.5F, 1.0F);
          world.playSound(caster.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_SET_SPAWN, 0.5F, 0.5F);
-         int duration = Infuse.getInstance().getConfig().getInt("durations.invis_spark", 10);
-         double radius = Infuse.getInstance().getConfig().getDouble("radius.invis", 10.0);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.invis.spark.duration", 10);
+         double radius = Infuse.getInstance().getConfig().getDouble("effects.invis.spark.radius", 10.0);
          long durationTicks = duration * 20L;
          Set<Player> vanishedPlayers = new HashSet<>();
          vanishedPlayers.add(caster);
@@ -275,7 +275,7 @@ public class Invis implements Listener {
                10L
             );
          CooldownManager.setDuration(playerUUID, "invis", duration);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.invis_spark", 90);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.invis.spark.cooldown", 90);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented invis")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null

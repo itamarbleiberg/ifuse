@@ -3,10 +3,8 @@ package me.poggercity.infuse.Infuses;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import me.poggercity.infuse.Managers.Infuse;
 import me.poggercity.infuse.Managers.Settings;
 import org.bukkit.ChatColor;
-import org.bukkit.configuration.file.FileConfiguration;
 
 /**
  * Builds the potion lore from the config: disabled passives are left out, and numbers (chances, hit counts, levels,
@@ -21,10 +19,6 @@ public final class EffectLore {
 
    private static String hex(String hex) {
       return HexColorTranslator.translateToMinecraftColor(hex);
-   }
-
-   private static FileConfiguration cfg() {
-      return Infuse.getInstance().getConfig();
    }
 
    private static String num(double value) {
@@ -92,13 +86,13 @@ public final class EffectLore {
       }
    }
 
-   private static int cooldown(String key, int def, boolean augmented) {
-      int base = cfg().getInt("cooldowns." + key, def);
+   private static int cooldown(String effect, int def, boolean augmented) {
+      int base = Settings.sparkInt(effect, "cooldown", def);
       return augmented ? base / 2 : base;
    }
 
-   private static int duration(String key, int def) {
-      return cfg().getInt("durations." + key, def);
+   private static int duration(String effect, int def) {
+      return Settings.sparkInt(effect, "duration", def);
    }
 
    public static List<String> lore(String effect, boolean augmented) {
@@ -117,7 +111,7 @@ public final class EffectLore {
                .spark(
                   "Refund chance " + v(e, "consumable_refund", "spark_chance", 50) + "%, " + v(e, "exp_boost", "spark_multiplier", 3.0) + "x exp"
                )
-               .build(duration("emerald_spark", 10), cooldown("emerald_spark", 30, augmented));
+               .build(duration("emerald", 10), cooldown("emerald", 30, augmented));
          }
          case "feather": {
             String e = "feather";
@@ -131,7 +125,7 @@ public final class EffectLore {
                .passive("wind_charge_cooldown", "Windcharges have " + num(Settings.value(e, "wind_charge_cooldown", "ticks", 5) / 10.0) + "x cooldown")
                .passive("wind_charge_boost", "Windcharges have " + v(e, "wind_charge_boost", "velocity", 2.0) + "x velocity", "Windcharges go perfectly straight")
                .spark("Launches the player upward", "Slams back into the floor damaging nearby players")
-               .build(5, cooldown("feather_spark", 40, augmented));
+               .build(5, cooldown("feather", 40, augmented));
          }
          case "fire": {
             String e = "fire";
@@ -144,8 +138,8 @@ public final class EffectLore {
                .passive("evaporate_water", "Evaporate water")
                .passive("lava_bucket_clutch", "Lava buckets cancel fall damage")
                .passive("flame_arrows", "Fully charged arrows are set on fire")
-               .spark("Ignite all players within " + num(cfg().getDouble("radius.fire", 5.0)) + " blocks", "Final Ignition erupts and launches all players upward")
-               .build(duration("fire_spark", 4), cooldown("fire_spark", 60, augmented));
+               .spark("Ignite all players within " + num(Settings.spark("fire", "radius", 5.0)) + " blocks", "Final Ignition erupts and launches all players upward")
+               .build(duration("fire", 4), cooldown("fire", 60, augmented));
          }
          case "frost": {
             String e = "frost";
@@ -154,23 +148,22 @@ public final class EffectLore {
                .passive("freeze_mobs", "Freezes mobs every hit")
                .passive("ice_speed", "Speed " + v(e, "ice_speed", "level", 3) + " on ice and snow blocks")
                .passive("frozen_wind_charge_cooldown", "Frozen enemies' wind charge cooldown is " + v(e, "frozen_wind_charge_cooldown", "seconds", 3) + " seconds")
-               .spark("Freezes players on every hit", "Enemies within " + num(cfg().getDouble("radius.frost", 5.0)) + " blocks can't jump")
-               .build(duration("frost_spark", 10), cooldown("frost_spark", 90, augmented));
+               .spark("Freezes players on every hit", "Enemies within " + num(Settings.spark("frost", "radius", 5.0)) + " blocks can't jump")
+               .build(duration("frost", 10), cooldown("frost", 90, augmented));
          }
          case "haste": {
             String e = "haste";
             return new Builder(e, hex("#804B00"), hex("#B96C00"), "⛏")
                .passive(
                   "tool_enchants",
-                  "Fortune " + v(e, "tool_enchants", "fortune", 5),
-                  "Unbreaking " + v(e, "tool_enchants", "unbreaking", 5),
-                  "Efficiency " + v(e, "tool_enchants", "efficiency", 10)
+                  "Tools in your hand get Fortune " + v(e, "tool_enchants", "fortune", 5) + ", Unbreaking " + v(e, "tool_enchants", "unbreaking", 5),
+                  "and Efficiency " + v(e, "tool_enchants", "efficiency", 10) + " (the tool keeps them)"
                )
                .passive("haste_effect", "Haste " + v(e, "haste_effect", "level", 2))
                .passive("vein_miner", "Vein miner when crouched")
                .passive("shield_cooldown", "Axes disable your shield for only " + v(e, "shield_cooldown", "seconds", 2.5) + "s")
                .spark("Attack faster", "Mine faster")
-               .build(duration("haste_spark", 15), cooldown("haste_spark", 60, augmented));
+               .build(duration("haste", 15), cooldown("haste", 60, augmented));
          }
          case "heart": {
             String e = "heart";
@@ -183,7 +176,7 @@ public final class EffectLore {
                )
                .passive("health_display", "See player's health every " + v(e, "health_display", "hits", 10) + " hits")
                .spark("Heal players to 20 hearts instantly")
-               .build(duration("heart_spark", 60), cooldown("heart_spark", 120, augmented));
+               .build(duration("heart", 60), cooldown("heart", 120, augmented));
          }
          case "invis": {
             String e = "invis";
@@ -194,7 +187,7 @@ public final class EffectLore {
                .passive("mob_invisibility", "Fully invisible to mobs")
                .passive("arrow_blind", "Bow shots give blindness")
                .spark("Summons a smoke bomb", "Armor Invis to user", "Blinds and hides health of all enemies within the smoke screen")
-               .build(duration("invis_spark", 10), cooldown("invis_spark", 90, augmented));
+               .build(duration("invis", 10), cooldown("invis", 90, augmented));
          }
          case "ocean": {
             String e = "ocean";
@@ -203,12 +196,12 @@ public final class EffectLore {
                .passive("conduit_power", "Breathe underwater")
                .passive(
                   "water_bonus",
-                  "+" + v(e, "water_bonus", "extra_hearts", 2) + " hearts and Speed " + v(e, "water_bonus", "speed_level", 1) + " while in water"
+                  "+" + v(e, "water_bonus", "extra_hearts", 2) + " hearts and Regeneration " + v(e, "water_bonus", "regeneration_level", 1) + " while in water"
                )
                .passive("drowning_aura", "Make everyone around you start drowning")
                .passive("trident_pull", "Tridents pull players")
-               .spark("Summons a Whirlhole", "Pulls in all players and entities in " + num(cfg().getDouble("radius.ocean", 15.0)) + " blocks")
-               .build(duration("ocean_spark", 5), cooldown("ocean_spark", 90, augmented));
+               .spark("Summons a Whirlhole", "Pulls in all players and entities in " + num(Settings.spark("ocean", "radius", 15.0)) + " blocks")
+               .build(duration("ocean", 5), cooldown("ocean", 90, augmented));
          }
          case "regen": {
             String e = "regen";
@@ -219,7 +212,7 @@ public final class EffectLore {
                )
                .passive("extra_saturation", "Eating gives " + num(Settings.value(e, "extra_saturation", "amount", 6) / 2.0) + " extra saturation bars")
                .spark("Dealing damage heals you")
-               .build(duration("regen_spark", 30), cooldown("regen_spark", 60, augmented));
+               .build(duration("regen", 30), cooldown("regen", 60, augmented));
          }
          case "speed": {
             String e = "speed";
@@ -231,7 +224,7 @@ public final class EffectLore {
                   "Speed resets after " + v(e, "speed_stacking", "reset_seconds", 0.5) + " seconds of no activity"
                )
                .spark("Speed Dash")
-               .build(1, cooldown("speed_spark", 20, augmented));
+               .build(1, cooldown("speed", 20, augmented));
          }
          case "strength": {
             String e = "strength";
@@ -240,8 +233,8 @@ public final class EffectLore {
                .passive("shield_disable", "Disable shields for " + v(e, "shield_disable", "seconds", 10) + " seconds")
                .passive("piercing_arrows", "Arrows pierce through enemies")
                .passive("low_health_damage", "+1 Damage when under 6 Hearts", "+2 Damage when under 4 Hearts", "+3 Damage when under 2 Hearts")
-               .spark("Activate auto-crit for " + duration("strength_spark", 15) + " seconds")
-               .build(duration("strength_spark", 15), cooldown("strength_spark", 60, augmented));
+               .spark("Activate auto-crit for " + duration("strength", 15) + " seconds")
+               .build(duration("strength", 15), cooldown("strength", 60, augmented));
          }
          case "thunder": {
             String e = "thunder";
@@ -252,8 +245,8 @@ public final class EffectLore {
                )
                .passive("chain_lightning", "Thunder chains to nearby enemies")
                .passive("trident_smite", "Tridents smite enemies when thrown")
-               .spark("Smite all players within " + num(cfg().getDouble("radius.thunder", 7.0)) + " blocks", "Each player can be only smited 3 times")
-               .build(duration("thunder_spark", 10), cooldown("thunder_spark", 90, augmented));
+               .spark("Smite all players within " + num(Settings.spark("thunder", "radius", 7.0)) + " blocks", "Each player can be only smited 3 times")
+               .build(duration("thunder", 10), cooldown("thunder", 90, augmented));
          }
          case "ender": {
             String e = "ender";
@@ -266,7 +259,7 @@ public final class EffectLore {
                   "Instantly kills any mob and curses players",
                   "Cursing a player resets the spark cooldown"
                )
-               .build(1, cfg().getInt("cooldowns.ender_spark", 10));
+               .build(1, Settings.sparkInt("ender", "cooldown", 10));
          }
          case "apophis": {
             String c = hex("#301145");
@@ -287,11 +280,14 @@ public final class EffectLore {
             lore.add(ChatColor.GRAY.toString());
             lore.add(c + ChatColor.BOLD + "ꜱᴘᴀʀᴋ ᴇꜰꜰᴇᴄᴛꜱ:");
             lore.add(c + "◆ Combines Heart + Strength + Emerald sparks");
-            lore.add(c + "◆ Inflicts Blindness & Wither to enemies in " + num(cfg().getDouble("radius.apophis", 5.0)) + " blocks for 10s");
+            lore.add(
+               c + "◆ Inflicts Blindness & Wither to enemies in " + num(Settings.spark("apophis", "radius", 5.0)) + " blocks for "
+                  + Settings.sparkInt("apophis", "area_effect_seconds", 10) + "s"
+            );
             lore.add(c + "◆ Your hits apply Wither I for 15s");
             lore.add(ChatColor.GRAY.toString());
-            lore.add(hex("#007DD0") + "ᴅᴜʀᴀᴛɪᴏɴ: " + duration("apophis_spark", 20) + "s");
-            lore.add(hex("#007DD0") + "ᴄᴏᴏʟᴅᴏᴡɴ: " + cooldown("apophis_spark", 90, augmented) + "s");
+            lore.add(hex("#007DD0") + "ᴅᴜʀᴀᴛɪᴏɴ: " + duration("apophis", 20) + "s");
+            lore.add(hex("#007DD0") + "ᴄᴏᴏʟᴅᴏᴡɴ: " + cooldown("apophis", 90, augmented) + "s");
             return lore;
          }
          default:

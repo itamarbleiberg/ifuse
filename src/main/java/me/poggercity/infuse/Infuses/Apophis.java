@@ -32,6 +32,7 @@ import org.bukkit.potion.PotionEffectType;
 
 public class Apophis implements Listener {
    public static final String KEY = "apophis";
+   private final ManagedRegen regen = new ManagedRegen();
    private static final String GEM_NAME = HexColorTranslator.translateToMinecraftColor("#301145") + "Apophis Effect";
    private static final String APOPHIS_KEY = "apophis";
    private final Plugin plugin;
@@ -80,14 +81,16 @@ public class Apophis implements Listener {
    }
 
    public void applyApophisEffects() {
-      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("configs.disabled_worlds").stream().map(String::toLowerCase).toList();
+      List<String> disabledWorlds = Infuse.getInstance().getConfig().getStringList("general.disabled_worlds").stream().map(String::toLowerCase).toList();
 
       for (Player player : Bukkit.getOnlinePlayers()) {
          String worldName = player.getWorld().getName().toLowerCase();
          if (disabledWorlds.contains(worldName)) {
             this.disableLavaFlightIfNeeded(player);
+            this.regen.remove(player);
          } else if (!this.hasApophisEquipped(player)) {
             this.disableLavaFlightIfNeeded(player);
+            this.regen.remove(player);
          } else {
             Location anchor = player.getLocation();
             Bukkit.getRegionScheduler()
@@ -95,9 +98,9 @@ public class Apophis implements Listener {
                   Infuse.getInstance(),
                   anchor,
                   task -> {
-                     if (Settings.passive(KEY, "regeneration")) {
-                        player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 40, 0, false, false, false));
-                     }
+                     // Re-adding a 40-tick Regeneration every update (as before) never reached a healing tick, so
+                     // this passive never healed.
+                     this.regen.tick(player, Settings.passive(KEY, "regeneration") && player.isOnline(), 0);
 
                      if (Settings.passive(KEY, "water_breathing")) {
                         player.addPotionEffects(
@@ -145,9 +148,18 @@ public class Apophis implements Listener {
       }
    }
 
+   /** Turns off what Apophis keeps on players (lava flight, Regeneration), for when Apophis is disabled in the config. */
+   public void disableAll() {
+      for (Player player : Bukkit.getOnlinePlayers()) {
+         this.disableLavaFlightIfNeeded(player);
+         this.regen.remove(player);
+      }
+   }
+
    @EventHandler
    public void onQuit(PlayerQuitEvent event) {
       this.disableLavaFlightIfNeeded(event.getPlayer());
+      this.regen.remove(event.getPlayer());
       this.apophisHitCount.remove(event.getPlayer().getUniqueId());
    }
 
@@ -164,7 +176,7 @@ public class Apophis implements Listener {
       if (!CooldownManager.isOnCooldown(uuid, "apophis")) {
          particles.spawnEffect("apophis", player, Color.fromRGB(48, 17, 69));
          player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
-         int duration = Infuse.getInstance().getConfig().getInt("durations.apophis_spark", 20);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.apophis.spark.duration", 20);
          // 20 hearts for the spark's duration: Heart.tickMaxHealth gives them while the "apophis" duration is active
          // and takes them away afterwards. The tool/weapon enchantments are given by ToolBonuses for the same time;
          // they used to be written onto the held item, stayed there if the player switched items, and enchantments
@@ -173,7 +185,8 @@ public class Apophis implements Listener {
          Infuse.getInstance().getHeart().updateMaxHealth(player);
          player.setHealth(Math.min(player.getHealth() + 20.0, player.getAttribute(Attribute.MAX_HEALTH).getValue()));
          CooldownManager.setDuration(uuid, "st", duration);
-         double radius = Infuse.getInstance().getConfig().getDouble("radius.apophis", 5.0);
+         double radius = Infuse.getInstance().getConfig().getDouble("effects.apophis.spark.radius", 5.0);
+         int areaTicks = Math.max(1, Settings.sparkInt(KEY, "area_effect_seconds", 10)) * 20;
 
          for (Entity e : player.getNearbyEntities(radius, radius, radius)) {
             if (e.getWorld() != null
@@ -182,15 +195,15 @@ public class Apophis implements Listener {
                && !Infuse.getInstance().getTrustManager().isTrusted(player, target)) {
                Location tAnchor = target.getLocation();
                Bukkit.getRegionScheduler().run(this.plugin, tAnchor, task -> {
-                  target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, 200, 0, false, false));
-                  target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 200, 0, false, false));
+                  target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, areaTicks, 0, false, false));
+                  target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, areaTicks, 0, false, false));
                });
             }
          }
 
          CooldownManager.setCooldown(uuid, "fire_spark", 0L);
          Infuse.getInstance().getFire().activateSpark(player);
-         int baseCd = Infuse.getInstance().getConfig().getInt("cooldowns.apophis_spark", 90);
+         int baseCd = Infuse.getInstance().getConfig().getInt("effects.apophis.spark.cooldown", 90);
          boolean augmented = this.isAugmentedApophis(player);
          int finalCd = augmented ? baseCd / 2 + duration : baseCd + duration;
          CooldownManager.setCooldown(uuid, "apophis", finalCd);
@@ -201,6 +214,7 @@ public class Apophis implements Listener {
    public void onPlayerHit(EntityDamageByEntityEvent event) {
       if (event.getDamager() instanceof Player attacker
          && event.getEntity() instanceof Player target
+         && Infuse.getInstance().isApophisEnabled()
          && this.hasApophisEquipped(attacker)
          && Settings.passive(KEY, "wither_on_hit")
          && !Infuse.getInstance().getTrustManager().isTrusted(attacker, target)) {

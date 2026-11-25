@@ -83,10 +83,10 @@ public class Strength implements Listener {
    public void activateSpark(Player player) {
       UUID playerUUID = player.getUniqueId();
       if (!CooldownManager.isOnCooldown(playerUUID, "st")) {
-         int duration = Infuse.getInstance().getConfig().getInt("durations.strength_spark", 15);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.strength.spark.duration", 15);
          particles.spawnEffect("strength", player, Color.fromRGB(139, 0, 0));
          CooldownManager.setDuration(playerUUID, "st", duration);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.strength_spark", 60);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.strength.spark.cooldown", 60);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented strength")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null

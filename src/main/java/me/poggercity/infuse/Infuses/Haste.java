@@ -17,6 +17,7 @@ import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -24,6 +25,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
@@ -57,17 +59,66 @@ public class Haste implements Listener {
    // Players whose vein mine is running, so the block breaks it causes don't start another vein mine.
    private final Set<UUID> veinMining = new HashSet<>();
 
-   // Haste II while equipped. The Efficiency/Fortune/Unbreaking passive is in ToolBonuses: it no longer writes the
-   // enchantments onto the player's tools (they used to stay on the tool forever, even after unequipping Haste).
+   // Haste II while equipped, and the tool enchantments.
    public void applyHasteEffects() {
-      if (Settings.passive(KEY, "haste_effect")) {
-         int amplifier = Math.max(1, Settings.intValue(KEY, "haste_effect", "level", 2)) - 1;
+      boolean hasteEffect = Settings.passive(KEY, "haste_effect");
+      boolean toolEnchants = Settings.passive(KEY, "tool_enchants");
+      int amplifier = Math.max(1, Settings.intValue(KEY, "haste_effect", "level", 2)) - 1;
 
-         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (this.hasImmortalHackEquipped(player)) {
+      for (Player player : Bukkit.getOnlinePlayers()) {
+         if (this.hasImmortalHackEquipped(player)) {
+            if (hasteEffect) {
                Bukkit.getRegionScheduler()
                   .run(Infuse.getInstance(), player.getLocation(), task -> player.addPotionEffect(new PotionEffect(PotionEffectType.HASTE, 40, amplifier, false, false, false)));
             }
+
+            if (toolEnchants && !Settings.worldDisabled(player.getWorld())) {
+               enchantTool(player.getInventory().getItemInMainHand());
+            }
+         }
+      }
+   }
+
+   private static boolean isTool(Material type) {
+      String n = type.name();
+      return !type.isLegacy() && (n.endsWith("_PICKAXE") || n.endsWith("_AXE") || n.endsWith("_SHOVEL") || n.endsWith("_HOE"));
+   }
+
+   /**
+    * The pickaxe, axe, shovel or hoe a Haste player holds gets Efficiency, Fortune and Unbreaking as real enchantments
+    * (shown on the item). The tool keeps them for good, also after Haste is gone and when it is given to another
+    * player, as in Infuse 2.4. Levels are only raised: a tool that already has a higher level keeps it. Returns true
+    * if the item was changed.
+    */
+   public static boolean enchantTool(ItemStack item) {
+      if (item == null || !isTool(item.getType())) {
+         return false;
+      } else {
+         ItemMeta meta = item.getItemMeta();
+         if (meta == null) {
+            return false;
+         } else {
+            boolean changed = false;
+            Object[][] levels = new Object[][]{
+               {Enchantment.EFFICIENCY, Settings.intValue(KEY, "tool_enchants", "efficiency", 10)},
+               {Enchantment.FORTUNE, Settings.intValue(KEY, "tool_enchants", "fortune", 5)},
+               {Enchantment.UNBREAKING, Settings.intValue(KEY, "tool_enchants", "unbreaking", 5)}
+            };
+
+            for (Object[] entry : levels) {
+               Enchantment enchantment = (Enchantment)entry[0];
+               int level = Math.min(255, (Integer)entry[1]);
+               if (level > 0 && meta.getEnchantLevel(enchantment) < level) {
+                  meta.addEnchant(enchantment, level, true);
+                  changed = true;
+               }
+            }
+
+            if (changed) {
+               item.setItemMeta(meta);
+            }
+
+            return changed;
          }
       }
    }
@@ -144,12 +195,12 @@ public class Haste implements Listener {
          }
 
          player.playSound(player.getLocation(), Sound.BLOCK_ANVIL_USE, 1.0F, 1.5F);
-         int duration = Infuse.getInstance().getConfig().getInt("durations.haste_spark", 15);
+         int duration = Infuse.getInstance().getConfig().getInt("effects.haste.spark.duration", 15);
          Location anchor = player.getLocation();
          Bukkit.getRegionScheduler()
             .run(Infuse.getInstance(), anchor, task -> player.addPotionEffect(new PotionEffect(PotionEffectType.HASTE, duration * 20, 3, false, false, false)));
          CooldownManager.setDuration(playerUUID, "haste", duration);
-         int configcooldown = Infuse.getInstance().getConfig().getInt("cooldowns.haste_spark", 60);
+         int configcooldown = Infuse.getInstance().getConfig().getInt("effects.haste.spark.cooldown", 60);
          boolean isAugmented = Infuse.getInstance().getHackManager().getHack(playerUUID, "1") != null
                && ChatColor.stripColor(Infuse.getInstance().getHackManager().getHack(playerUUID, "1")).toLowerCase().contains("augmented haste")
             || Infuse.getInstance().getHackManager().getHack(playerUUID, "2") != null
