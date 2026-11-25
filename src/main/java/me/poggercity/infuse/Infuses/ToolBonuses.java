@@ -100,7 +100,7 @@ public class ToolBonuses implements Listener {
          }
       }
 
-      return Gamble.borrowsPassive(player, name.toLowerCase(Locale.ROOT));
+      return WinnersCurse.borrowsPassive(player, name.toLowerCase(Locale.ROOT));
    }
 
    private static boolean worldDisabled(Player player) {

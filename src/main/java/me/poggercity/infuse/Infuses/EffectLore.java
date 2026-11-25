@@ -84,6 +84,13 @@ public final class EffectLore {
          lore.add(hex("#007DD0") + "ᴄᴏᴏʟᴅᴏᴡɴ: " + cooldownSeconds + "s");
          return lore;
       }
+
+      /** For a spark without one duration of its own (Winner's Curse: the won spark's duration counts). */
+      List<String> buildCooldownOnly(int cooldownSeconds) {
+         List<String> lore = this.build(0, cooldownSeconds);
+         lore.removeIf(line -> line.contains("ᴅᴜʀᴀᴛɪᴏɴ: "));
+         return lore;
+      }
    }
 
    private static int cooldown(String effect, int def, boolean augmented) {
@@ -262,15 +269,21 @@ public final class EffectLore {
                )
                .build(1, Settings.sparkInt("ender", "cooldown", 10));
          }
-         case "gamble": {
-            String e = "gamble";
+         case WinnersCurse.KEY: {
+            String e = WinnersCurse.KEY;
             double minutes = Settings.value(e, "random_passive", "minutes", 5.0);
             String every = minutes == 1.0 ? "minute" : num(minutes) + " minutes";
             int roll = Math.max(1, Settings.sparkInt(e, "roll_seconds", 5));
+            int useWithin = Math.max(1, Settings.sparkInt(e, "use_within_seconds", 30));
             return new Builder(e, hex("#12A37F"), hex("#1EE8B6"), "\ud83c\udfb2")
                .passive("random_passive", "Every " + every + " you get the passives of a random effect", "(a different one each time, never Ender or Apophis)")
-               .spark("Spins a slot machine for " + roll + " seconds", "Then uses the spark of a random effect", "(never Ender or Apophis)")
-               .build(roll, cooldown("gamble", 120, augmented));
+               .spark(
+                  "Spins a slot machine for " + roll + " seconds",
+                  "You win the spark of a random effect (never Ender or Apophis)",
+                  "Use it within " + useWithin + " seconds or it's gone",
+                  "The cooldown starts once the won spark is over or gone"
+               )
+               .buildCooldownOnly(cooldown(e, 120, augmented));
          }
          case "apophis": {
             String c = hex("#301145");

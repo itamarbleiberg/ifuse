@@ -13,7 +13,7 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
-import me.poggercity.infuse.Infuses.Gamble;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -82,7 +82,7 @@ public class HackRerollListener implements Listener, CommandExecutor {
 
    /** The order effects are shown in the menus. */
    public static final List<String> MENU_ORDER = List.of(
-      "strength", "speed", "regen", "ender", "invis", "heart", "haste", "frost", "fire", "feather", "emerald", "thunder", "apophis", "ocean", "gamble"
+      "strength", "speed", "regen", "ender", "invis", "heart", "haste", "frost", "fire", "feather", "emerald", "thunder", "apophis", "ocean", WinnersCurse.KEY
    );
    // Three rows of five in the middle of a 54-slot menu.
    private static final int[][] ROWS = new int[][]{{11, 12, 13, 14, 15}, {20, 21, 22, 23, 24}, {29, 30, 31, 32, 33}};
@@ -355,8 +355,8 @@ public class HackRerollListener implements Listener, CommandExecutor {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Thunder Effect");
                   } else if (Apophis.isApophisGem(clickedItem) || this.nameIs(clickedItem, "Apophis Effect")) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Apophis Effect");
-                  } else if (Gamble.isGambleGem(clickedItem)) {
-                     this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.GEM_NAME);
+                  } else if (WinnersCurse.isCurseGem(clickedItem)) {
+                     this.hackEquipListener.handleLegendaryHack(player, clickedItem, WinnersCurse.GEM_NAME);
                   } else if (this.isEnder(clickedItem)) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Ender Effect");
                   }
@@ -428,8 +428,8 @@ public class HackRerollListener implements Listener, CommandExecutor {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Ender Effect");
                   } else if (Augmented.ISAPOPHIS(clickedItem) || this.nameIs(clickedItem, "Augmented Apophis Effect")) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Apophis Effect");
-                  } else if (Augmented.ISGAMBLE(clickedItem)) {
-                     this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.AUGMENTED_NAME);
+                  } else if (Augmented.ISCURSE(clickedItem)) {
+                     this.hackEquipListener.handleLegendaryHack(player, clickedItem, WinnersCurse.AUGMENTED_NAME);
                   } else if (this.isEnder(clickedItem)) {
                      this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Ender Effect");
                   }

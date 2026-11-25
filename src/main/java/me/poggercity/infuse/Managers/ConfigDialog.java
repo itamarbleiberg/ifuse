@@ -114,7 +114,8 @@ public class ConfigDialog implements TabExecutor {
          player.sendMessage(Component.text("You don't have permission to change Infuse settings.", NamedTextColor.RED));
          return true;
       } else {
-         String first = args.length > 0 ? args[0].toLowerCase(Locale.ROOT) : "";
+         // ("gamble", Winner's Curse's 2.7 name, still opens its page)
+         String first = args.length > 0 ? EffectKeys.normalize(args[0]) : "";
          if (first.equals("general") || first.equals("rituals")) {
             this.openSection(player, first, title(first), () -> this.openMenu(player));
          } else if (first.equals("starting_effects") || first.equals("starting")) {
@@ -153,7 +154,7 @@ public class ConfigDialog implements TabExecutor {
          options.add("rituals");
          options.add("reload");
          options.addAll(Arrays.asList(Infuse.EFFECT_KEYS));
-      } else if (args.length == 2 && isEffect(args[0].toLowerCase(Locale.ROOT))) {
+      } else if (args.length == 2 && isEffect(EffectKeys.normalize(args[0]))) {
          for (String[] p : EFFECT_PARTS) {
             options.add(p[0]);
          }
@@ -173,12 +174,17 @@ public class ConfigDialog implements TabExecutor {
    // ----- helpers -----
 
    private static String title(String key) {
-      return key.isEmpty() ? key : Character.toUpperCase(key.charAt(0)) + key.substring(1);
+      return EffectKeys.title(key);
    }
 
    private static String humanize(String key) {
-      String s = key.replace('_', ' ').replace("0 0", "0, 0");
-      return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+      if (EffectKeys.isEffectKey(key)) {
+         // "winners_curse" is shown as "Winner's Curse" (in starting_effects and the can_roll lists)
+         return EffectKeys.title(key);
+      } else {
+         String s = key.replace('_', ' ').replace("0 0", "0, 0");
+         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+      }
    }
 
    private static boolean allowed(Audience audience) {

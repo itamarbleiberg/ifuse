@@ -9,7 +9,7 @@
 # =====================================================================================================
 
 # Used to update this file automatically. Don't change it.
-config_version: 4
+config_version: 5
 
 # -----------------------------------------------------------------------------------------------------
 #  GENERAL
@@ -24,7 +24,7 @@ general:
   # true = players can't swap or drain effects while one of their sparks is on cooldown
   no_swap_while_spark_on_cooldown: false
   # true = a player can only have one primary effect
-  # (primary: Invis, Haste, Regen, Apophis, Ender, Feather, Thunder, Strength, Frost, Heart, Gamble)
+  # (primary: Invis, Haste, Regen, Apophis, Ender, Feather, Thunder, Strength, Frost, Heart, Winner's Curse)
   only_one_primary_effect: false
   # Effects a player drops when they die: 0 = none, 1 = one effect, 2 = both
   drop_effects_on_death: 1
@@ -60,7 +60,7 @@ starting_effects:
   thunder: true
   ender: true
   apophis: true
-  gamble: true
+  winners_curse: true
 
 # -----------------------------------------------------------------------------------------------------
 #  RITUALS
@@ -498,7 +498,8 @@ effects:
       # While the spark is on: tools count as Efficiency 10 / Fortune 5, weapons as Sharpness 5 / Looting 5
       spark_tool_bonus: {enabled: true}
 
-  gamble:
+  # Winner's Curse (called Gamble in 2.7)
+  winners_curse:
     craft:
       augmented_crafts: 1
       normal_crafts: 3
@@ -513,9 +514,12 @@ effects:
           E: EMERALD_BLOCK
           R: MUSIC_DISC_RELIC
     spark:
+      # Starts once the won spark is over (or gone unused)
       cooldown: 120
-      # How long the slot machine spins before the random spark is used
+      # How long the slot machine spins
       roll_seconds: 5
+      # How long players have to use the spark they won (with their spark key); after that it is gone
+      use_within_seconds: 30
       # Which effects' sparks the slot machine can land on (it never lands on Ender or Apophis)
       can_roll:
         emerald: true

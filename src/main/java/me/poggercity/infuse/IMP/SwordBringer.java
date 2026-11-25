@@ -10,7 +10,7 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
-import me.poggercity.infuse.Infuses.Gamble;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -82,7 +82,7 @@ public class SwordBringer implements Listener, CommandExecutor {
       Effects.createFIRE(),
       Effects.createSPEED(),
       Effects.createDRAGON(),
-      Effects.createGAMBLE()
+      Effects.createCURSE()
    );
    private final List<ItemStack> gems2 = Arrays.asList(
       Augmented.createINVIS(),
@@ -99,7 +99,7 @@ public class SwordBringer implements Listener, CommandExecutor {
       Augmented.createFIRE(),
       Augmented.createSPEED(),
       Effects.createDRAGON(),
-      Augmented.createGAMBLE()
+      Augmented.createCURSE()
    );
 
    public SwordBringer(JavaPlugin plugin, HackEquipListener hackEquipListener) {
@@ -267,10 +267,10 @@ public class SwordBringer implements Listener, CommandExecutor {
                this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Fire Effect");
             } else if (Augmented.ISTHUNDER(clickedItem)) {
                this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Augmented Thunder Effect");
-            } else if (Gamble.isGambleGem(clickedItem)) {
-               this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.GEM_NAME);
-            } else if (Augmented.ISGAMBLE(clickedItem)) {
-               this.hackEquipListener.handleLegendaryHack(player, clickedItem, Gamble.AUGMENTED_NAME);
+            } else if (WinnersCurse.isCurseGem(clickedItem)) {
+               this.hackEquipListener.handleLegendaryHack(player, clickedItem, WinnersCurse.GEM_NAME);
+            } else if (Augmented.ISCURSE(clickedItem)) {
+               this.hackEquipListener.handleLegendaryHack(player, clickedItem, WinnersCurse.AUGMENTED_NAME);
             } else if (Ender.isStrengthGem(clickedItem)) {
                this.hackEquipListener.handleLegendaryHack(player, clickedItem, "Ender Effect");
             }

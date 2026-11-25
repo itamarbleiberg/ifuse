@@ -8,7 +8,6 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
-import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -17,7 +16,9 @@ import me.poggercity.infuse.Infuses.Regen;
 import me.poggercity.infuse.Infuses.Speed;
 import me.poggercity.infuse.Infuses.Strength;
 import me.poggercity.infuse.Infuses.Thunder;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import me.poggercity.infuse.Managers.CooldownManager;
+import me.poggercity.infuse.Managers.EffectKeys;
 import me.poggercity.infuse.Managers.Infuse;
 import me.poggercity.infuse.Managers.PlayerHackManager;
 import org.bukkit.ChatColor;
@@ -47,7 +48,7 @@ public class Abilities implements CommandExecutor, Listener {
    private final Thunder thunderAbility;
    private final Ender dragon;
    private final Apophis apophisAbility;
-   private final Gamble gambleAbility;
+   private final WinnersCurse curseAbility;
 
    public Abilities(Infuse plugin) {
       this.plugin = plugin;
@@ -65,7 +66,7 @@ public class Abilities implements CommandExecutor, Listener {
       this.thunderAbility = plugin.getThunder();
       this.dragon = plugin.getEnder();
       this.apophisAbility = plugin.getApophis();
-      this.gambleAbility = plugin.getGamble();
+      this.curseAbility = plugin.getWinnersCurse();
    }
 
    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -128,6 +129,15 @@ public class Abilities implements CommandExecutor, Listener {
                player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
             }
 
+            return;
+         }
+
+         // A spark won with Winner's Curse is still running: the player's own spark of that effect waits for it to end,
+         // because two of the same spark at once end each other early (Invis shows the player again, Frost gives back
+         // the jumps).
+         String effectKey = EffectKeys.keyOf(abilityName);
+         if (WinnersCurse.blocksOwnSpark(player, effectKey)) {
+            player.sendMessage(ChatColor.GRAY + "Your " + EffectKeys.title(effectKey) + " spark from Winner's Curse is still running.");
             return;
          }
 
@@ -288,10 +298,12 @@ public class Abilities implements CommandExecutor, Listener {
                   player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 1.0F, 2.0F);
                }
                break;
-            case Gamble.GEM_NAME:
-            case Gamble.AUGMENTED_NAME:
-               // The slot machine plays its own sounds and uses the spark it lands on after spinning.
-               this.gambleAbility.activateSpark(player);
+            case WinnersCurse.GEM_NAME:
+            case WinnersCurse.AUGMENTED_NAME:
+            case WinnersCurse.LEGACY_GEM_NAME:
+            case WinnersCurse.LEGACY_AUGMENTED_NAME:
+               // Spins the slot machine, or uses the spark it won. It plays its own sounds.
+               this.curseAbility.activateSpark(player);
                break;
             case "Ender Effect":
                if (CooldownManager.isOnCooldown(player.getUniqueId(), "ender")) {

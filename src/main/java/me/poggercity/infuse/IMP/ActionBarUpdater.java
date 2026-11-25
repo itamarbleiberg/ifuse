@@ -5,8 +5,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.HexColorTranslator;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import me.poggercity.infuse.Managers.EffectKeys;
 import me.poggercity.infuse.Managers.CooldownManager;
 import me.poggercity.infuse.Managers.Infuse;
@@ -65,19 +65,36 @@ public class ActionBarUpdater {
       this.hackKeys.put("Augmented Thunder Effect", "thunder");
       this.hackKeys.put("Apophis Effect", "apophis");
       this.hackKeys.put("Augmented Apophis Effect", "apophis");
-      this.hackKeys.put(Gamble.GEM_NAME, Gamble.KEY);
-      this.hackKeys.put(Gamble.AUGMENTED_NAME, Gamble.KEY);
+      this.hackKeys.put(WinnersCurse.GEM_NAME, WinnersCurse.KEY);
+      this.hackKeys.put(WinnersCurse.AUGMENTED_NAME, WinnersCurse.KEY);
    }
 
-   // Gamble has no icon in the resource pack: a die, followed by the effect whose passives it gives right now.
-   private String gambleIcon(Player player, String hack, String emoji) {
-      if (!hack.equals(Gamble.GEM_NAME) && !hack.equals(Gamble.AUGMENTED_NAME)) {
-         return emoji;
-      } else {
-         String passive = Gamble.currentPassive(player);
-         String die = HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(Gamble.KEY)) + EffectKeys.icon(Gamble.KEY);
-         return passive == null ? die : die + " " + HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(passive)) + EffectKeys.title(passive);
+   private static String hexColor(String effect) {
+      return HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(effect));
+   }
+
+   /**
+    * The time and icon shown for Winner's Curse, which has no icon in the resource pack: a die, then the icon of the
+    * effect whose passives it gives right now. While a won spark waits to be used, the time shows that spark's icon and
+    * the seconds left to use it (blinking red in the last 5 seconds).
+    */
+   private String[] curseSlot(Player player) {
+      UUID uuid = player.getUniqueId();
+      String time = "";
+      String held = WinnersCurse.heldSpark(player);
+      if (held != null) {
+         long left = WinnersCurse.heldSecondsLeft(player);
+         String color = left <= 5L && this.tick / 10L % 2L == 0L ? ChatColor.RED.toString() : hexColor(held);
+         time = color + EffectKeys.icon(held) + " " + this.formatTime(left, color);
+      } else if (CooldownManager.isEffectActive(uuid, WinnersCurse.KEY)) {
+         time = this.formatTime(CooldownManager.getEffectTimeLeft(uuid, WinnersCurse.KEY) / 1000L, hexColor(WinnersCurse.KEY));
+      } else if (CooldownManager.isOnCooldown(uuid, WinnersCurse.KEY)) {
+         time = this.formatTime(CooldownManager.getCooldownTimeLeft(uuid, WinnersCurse.KEY) / 1000L, ChatColor.WHITE.toString());
       }
+
+      String passive = WinnersCurse.currentPassive(player);
+      String icon = hexColor(WinnersCurse.KEY) + EffectKeys.icon(WinnersCurse.KEY) + (passive == null ? "" : " " + hexColor(passive) + EffectKeys.icon(passive));
+      return new String[]{time, icon};
    }
 
    private String getHackColor(String hack) {
@@ -121,9 +138,9 @@ public class ActionBarUpdater {
                return HexColorTranslator.translateToMinecraftColor("#d1a44b");
             case "Ender Effect":
                return HexColorTranslator.translateToMinecraftColor("#3A0735");
-            case Gamble.GEM_NAME:
-            case Gamble.AUGMENTED_NAME:
-               return HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(Gamble.KEY));
+            case WinnersCurse.GEM_NAME:
+            case WinnersCurse.AUGMENTED_NAME:
+               return hexColor(WinnersCurse.KEY);
             default:
                return ChatColor.GRAY.toString();
          }
@@ -158,8 +175,10 @@ public class ActionBarUpdater {
             }
          }
 
-         if (commonHack != null) {
-            firstEmoji = this.gambleIcon(player, ChatColor.stripColor(commonHack), firstEmoji);
+         if (WinnersCurse.isName(commonHack)) {
+            String[] curse = this.curseSlot(player);
+            firstTime = curse[0];
+            firstEmoji = curse[1];
          }
 
          String secondTime = "";
@@ -183,8 +202,10 @@ public class ActionBarUpdater {
             }
          }
 
-         if (legendaryHack != null) {
-            key = this.gambleIcon(player, ChatColor.stripColor(legendaryHack), key);
+         if (WinnersCurse.isName(legendaryHack)) {
+            String[] curse = this.curseSlot(player);
+            secondTime = curse[0];
+            key = curse[1];
          }
 
          String stripped = "    ";

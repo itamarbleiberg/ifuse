@@ -1,5 +1,5 @@
 name: Infuse
-version: '2.7'
+version: '2.8'
 main: me.poggercity.infuse.Managers.Infuse
 api-version: '1.21.11'
 authors: [ Pogger city ]

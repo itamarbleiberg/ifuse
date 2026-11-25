@@ -23,7 +23,7 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
-import me.poggercity.infuse.Infuses.Gamble;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.HexColorTranslator;
@@ -78,7 +78,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    private Regen regen;
    private Thunder thunder;
    private Apophis apophis;
-   private Gamble gamble;
+   private WinnersCurse winnersCurse;
    private ToolBonuses toolBonuses;
    private Passive passive;
    private Ritual ritual;
@@ -130,7 +130,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
    }
 
    public static final String[] EFFECT_KEYS = new String[]{
-      "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis", "gamble"
+      "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis", "winners_curse"
    };
 
 
@@ -401,8 +401,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
          return "\ue013";
       } else if (name.contains("Ender")) {
          return "\ue100";
-      } else if (name.contains("Gamble")) {
-         return EffectKeys.icon("gamble");
+      } else if (name.contains("Winner's Curse")) {
+         return EffectKeys.icon(WinnersCurse.KEY);
       } else {
          return name.contains("Apophis") ? "\ue055" : "\ue002";
       }
@@ -436,6 +436,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
          return HexColorTranslator.translateToMinecraftColor("#301145");
       } else if (name.contains("Ender")) {
          return HexColorTranslator.translateToMinecraftColor("#541351");
+      } else if (name.contains("Winner's Curse")) {
+         return HexColorTranslator.translateToMinecraftColor(EffectKeys.hex(WinnersCurse.KEY));
       } else {
          return name.contains("Thunder") ? HexColorTranslator.translateToMinecraftColor("#FCED00") : ChatColor.AQUA.toString();
       }
@@ -482,8 +484,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       this.getLogger().info("Infuse Plugin is disabling...");
       // The recipe editor's grid only holds copies; it must not stay open without its listener.
       RecipeEditor.closeAll();
-      if (this.gamble != null) {
-         this.gamble.shutdown();
+      if (this.winnersCurse != null) {
+         this.winnersCurse.shutdown();
       }
       if (this.recipeManager != null) {
          // Saves running rituals so they continue after a restart, and removes their beam entities.
@@ -541,7 +543,7 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       this.regen = new Regen(this);
       this.thunder = new Thunder(this);
       this.apophis = new Apophis(this);
-      this.gamble = new Gamble(this);
+      this.winnersCurse = new WinnersCurse(this);
       this.toolBonuses = new ToolBonuses(this);
    }
 
@@ -605,8 +607,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       return this.apophis;
    }
 
-   public Gamble getGamble() {
-      return this.gamble;
+   public WinnersCurse getWinnersCurse() {
+      return this.winnersCurse;
    }
 
    public boolean isApophisEnabled() {
@@ -636,8 +638,8 @@ public class Infuse extends JavaPlugin implements Listener, TabCompleter {
       Bukkit.getPluginManager().registerEvents(this.speed, this);
       Bukkit.getPluginManager().registerEvents(this.fire, this);
       Bukkit.getPluginManager().registerEvents(this.toolBonuses, this);
-      Bukkit.getPluginManager().registerEvents(this.gamble, this);
-      this.gamble.start();
+      Bukkit.getPluginManager().registerEvents(this.winnersCurse, this);
+      this.winnersCurse.start();
       Bukkit.getPluginManager().registerEvents(this.abilitiesHandler, this);
       Bukkit.getPluginManager().registerEvents(new HackRerollListener(this, new HackEquipListener()), this);
       // Runs every tick and does the work every general.passive_update_ticks ticks, so changing that setting applies

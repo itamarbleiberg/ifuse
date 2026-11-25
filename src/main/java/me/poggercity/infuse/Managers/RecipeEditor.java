@@ -73,7 +73,7 @@ public class RecipeEditor implements Listener {
    }
 
    private static String title(String effect) {
-      return Character.toUpperCase(effect.charAt(0)) + effect.substring(1);
+      return EffectKeys.title(effect);
    }
 
    private static ItemStack named(Material type, Component name, Component... lore) {

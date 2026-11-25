@@ -70,9 +70,9 @@ public class Emerald implements Listener {
       }
    }
 
-   // The Emerald spark from Gamble's slot machine: its better refunds and exp work without having Emerald, while it lasts.
-   private static boolean sparkFromGamble(Player player) {
-      return sparkActive(player) && Gamble.rolledSpark(player, KEY);
+   // The Emerald spark won with Winner's Curse: its better refunds and exp work without having Emerald, while it lasts.
+   private static boolean sparkFromCurse(Player player) {
+      return sparkActive(player) && WinnersCurse.rolledSpark(player, KEY);
    }
 
    private static boolean sparkActive(Player player) {
@@ -83,7 +83,7 @@ public class Emerald implements Listener {
    private boolean hasImmortalHackEquipped(Player player, String tier) {
       String currentHack = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), tier);
       return currentHack != null && (currentHack.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || currentHack.equals("Augmented Emerald Effect"))
-         || Gamble.borrowsPassive(player, KEY);
+         || WinnersCurse.borrowsPassive(player, KEY);
    }
 
    private boolean isSword(ItemStack item) {
@@ -103,7 +103,7 @@ public class Emerald implements Listener {
    @EventHandler
    public void onPlayerExpChange(PlayerExpChangeEvent event) {
       Player player = event.getPlayer();
-      if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2") || sparkFromGamble(player)) && Settings.passive(KEY, "exp_boost")) {
+      if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2") || sparkFromCurse(player)) && Settings.passive(KEY, "exp_boost")) {
          double multiplier = sparkActive(player)
             ? Settings.value(KEY, "exp_boost", "spark_multiplier", 3.0)
             : Settings.value(KEY, "exp_boost", "multiplier", 1.5);
@@ -155,7 +155,7 @@ public class Emerald implements Listener {
          Player player = event.getPlayer();
          ItemStack consumedItem = event.getItem();
          int originalCount = consumedItem.getAmount();
-         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2") || sparkFromGamble(player))
+         if ((this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2") || sparkFromCurse(player))
             && Settings.passive(KEY, "consumable_refund")) {
             if (consumedItem.getType() == Material.POTION) {
                return;
@@ -211,7 +211,7 @@ public class Emerald implements Listener {
          // Main hand only, as before. The item is still in the hand here: vanilla consumes it right after the launch.
          if (player.getInventory().getItemInMainHand().getType() == thrownItem
             && Settings.passive(KEY, "throwable_refund")
-            && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2") || sparkFromGamble(player))) {
+            && (this.hasImmortalHackEquipped(player, "1") || this.hasImmortalHackEquipped(player, "2") || sparkFromCurse(player))) {
             double chance = sparkActive(player)
                ? Settings.chance(KEY, "throwable_refund", "spark_chance", 50.0)
                : Settings.chance(KEY, "throwable_refund", "chance", 25.0);

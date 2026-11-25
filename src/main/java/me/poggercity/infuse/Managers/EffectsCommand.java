@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 import me.poggercity.infuse.IMP.HackMapping;
 import me.poggercity.infuse.IMP.HackRerollListener;
 import me.poggercity.infuse.Infuses.Effects;
-import me.poggercity.infuse.Infuses.Gamble;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import me.poggercity.infuse.Infuses.HexColorTranslator;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -37,9 +37,9 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
    private static final String THUNDER = HexColorTranslator.translateToMinecraftColor("#FCED00") + "Thunder Effect";
    private static final String ENDER = HexColorTranslator.translateToMinecraftColor("#541351") + "Ender Effect";
    private static final String APOPHIS = HexColorTranslator.translateToMinecraftColor("#301145") + "Apophis Effect";
-   private static final String GAMBLE = HexColorTranslator.translateToMinecraftColor("#1EE8B6") + "Gamble Effect";
+   private static final String CURSE = HexColorTranslator.translateToMinecraftColor("#1EE8B6") + WinnersCurse.GEM_NAME;
    private static final List<String> ALL_KEYS = Arrays.asList(
-      "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis", "gamble"
+      "emerald", "feather", "fire", "frost", "haste", "heart", "invis", "ocean", "regen", "speed", "strength", "thunder", "ender", "apophis", WinnersCurse.KEY
    );
    private static final List<String> EFFECT_OPTIONS = Arrays.asList(
       "Fire",
@@ -81,9 +81,9 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
       "Apophis",
       "Augment_Apophis",
       "Augmented_Apophis",
-      "Gamble",
-      "Augment_Gamble",
-      "Augmented_Gamble",
+      "Winners_Curse",
+      "Augment_Winners_Curse",
+      "Augmented_Winners_Curse",
       "fire",
       "augment_fire",
       "augmented_fire",
@@ -123,9 +123,9 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
       "apophis",
       "augment_apophis",
       "augmented_apophis",
-      "gamble",
-      "augment_gamble",
-      "augmented_gamble"
+      "winners_curse",
+      "augment_winners_curse",
+      "augmented_winners_curse"
    );
    private static final List<String> START_RITUAL_KEYS = Arrays.asList(
       "emerald",
@@ -170,9 +170,9 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
       "augmented_ender",
       "augment_apophis",
       "augmented_apophis",
-      "gamble",
-      "augment_gamble",
-      "augmented_gamble"
+      "winners_curse",
+      "augment_winners_curse",
+      "augmented_winners_curse"
    );
    private final JavaPlugin plugin;
    private final InfuseRecipeManager recipeManager;
@@ -246,12 +246,20 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
                sender.sendMessage(ChatColor.DARK_GRAY + "──────── " + ChatColor.AQUA + target.getName() + ChatColor.DARK_GRAY + " — Effects ────────");
                sender.sendMessage(ChatColor.GRAY + "Slot 1: " + (slot1 == null ? ChatColor.DARK_GRAY + "None" : slot1));
                sender.sendMessage(ChatColor.GRAY + "Slot 2: " + (slot2 == null ? ChatColor.DARK_GRAY + "None" : slot2));
-               String gamblePassive = Gamble.currentPassive(target);
-               if (gamblePassive != null) {
-                  long left = Gamble.passiveSecondsLeft(target);
+               String cursePassive = WinnersCurse.currentPassive(target);
+               if (cursePassive != null) {
+                  long left = WinnersCurse.passiveSecondsLeft(target);
                   sender.sendMessage(
-                     ChatColor.GRAY + "Gamble passive: " + this.capitalizeEffectName(gamblePassive) + ChatColor.GRAY + " (" + left / 60L + ":"
+                     ChatColor.GRAY + "Winner's Curse passive: " + this.capitalizeEffectName(cursePassive) + ChatColor.GRAY + " (" + left / 60L + ":"
                         + String.format("%02d", left % 60L) + " left)"
+                  );
+               }
+
+               String heldSpark = WinnersCurse.heldSpark(target);
+               if (heldSpark != null) {
+                  sender.sendMessage(
+                     ChatColor.GRAY + "Winner's Curse won spark: " + this.capitalizeEffectName(heldSpark) + ChatColor.GRAY + " ("
+                        + WinnersCurse.heldSecondsLeft(target) + "s left to use it)"
                   );
                }
 
@@ -427,8 +435,8 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
             baseColored = ENDER;
          } else if (lower.contains("apophis")) {
             baseColored = APOPHIS;
-         } else if (lower.contains("gamble")) {
-            baseColored = GAMBLE;
+         } else if (lower.contains("winner's curse") || lower.contains("gamble")) {
+            baseColored = CURSE;
          } else {
             baseColored = ChatColor.AQUA + s;
          }
@@ -462,6 +470,9 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
             base = "Ender";
          } else if (baseLower.equals("apophis")) {
             base = "Apophis";
+         } else if (baseLower.equals("winners curse") || baseLower.equals("winner's curse") || baseLower.equals("gamble")) {
+            // ("gamble" is its 2.7 name)
+            base = WinnersCurse.TITLE;
          } else {
             base = this.capitalizeWord(s);
          }
@@ -593,8 +604,9 @@ public class EffectsCommand implements CommandExecutor, TabCompleter {
                return ENDER;
             case "apophis":
                return APOPHIS;
+            case WinnersCurse.KEY:
             case "gamble":
-               return GAMBLE;
+               return CURSE;
             default:
                return key.substring(0, 1).toUpperCase(Locale.ROOT) + key.substring(1).toLowerCase(Locale.ROOT) + " Effect";
          }

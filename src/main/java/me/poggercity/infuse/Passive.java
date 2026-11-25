@@ -1,5 +1,6 @@
 package me.poggercity.infuse;
 
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import me.poggercity.infuse.Infuses.particles;
 import me.poggercity.infuse.Managers.Infuse;
 import me.poggercity.infuse.Managers.Settings;
@@ -54,8 +55,8 @@ public class Passive {
                }
             } else if (hack.contains("apophis")) {
                this.spawn("apophis", player, Color.fromRGB(48, 17, 69), isAugmented);
-            } else if (hack.contains("gamble")) {
-               this.spawn("gamble", player, Color.fromRGB(30, 232, 182), isAugmented);
+            } else if (hack.contains("winner's curse") || hack.contains("gamble")) {
+               this.spawn(WinnersCurse.KEY, player, Color.fromRGB(30, 232, 182), isAugmented);
             }
          }
       }

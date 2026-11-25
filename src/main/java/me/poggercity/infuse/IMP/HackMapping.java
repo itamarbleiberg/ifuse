@@ -8,7 +8,6 @@ import me.poggercity.infuse.Infuses.Ender;
 import me.poggercity.infuse.Infuses.Feather;
 import me.poggercity.infuse.Infuses.Fire;
 import me.poggercity.infuse.Infuses.Frost;
-import me.poggercity.infuse.Infuses.Gamble;
 import me.poggercity.infuse.Infuses.Haste;
 import me.poggercity.infuse.Infuses.Heart;
 import me.poggercity.infuse.Infuses.Invis;
@@ -17,6 +16,7 @@ import me.poggercity.infuse.Infuses.Regen;
 import me.poggercity.infuse.Infuses.Speed;
 import me.poggercity.infuse.Infuses.Strength;
 import me.poggercity.infuse.Infuses.Thunder;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import org.bukkit.inventory.ItemStack;
 
 public enum HackMapping {
@@ -317,26 +317,26 @@ public enum HackMapping {
          return Augmented.createAPOPHIS();
       }
    },
-   GAMBLE(Gamble.GEM_NAME) {
+   WINNERS_CURSE(WinnersCurse.GEM_NAME) {
       @Override
       public boolean matchesItem(ItemStack item) {
-         return Gamble.isGambleGem(item);
+         return WinnersCurse.isCurseGem(item);
       }
 
       @Override
       public ItemStack createItem() {
-         return Effects.createGAMBLE();
+         return Effects.createCURSE();
       }
    },
-   GAMBLE1(Gamble.AUGMENTED_NAME) {
+   WINNERS_CURSE1(WinnersCurse.AUGMENTED_NAME) {
       @Override
       public boolean matchesItem(ItemStack item) {
-         return Augmented.ISGAMBLE(item);
+         return Augmented.ISCURSE(item);
       }
 
       @Override
       public ItemStack createItem() {
-         return Augmented.createGAMBLE();
+         return Augmented.createCURSE();
       }
    };
 
@@ -371,7 +371,12 @@ public enum HackMapping {
          }
       }
 
-      return null;
+      // Winner's Curse was called Gamble in 2.7.
+      if (WinnersCurse.LEGACY_GEM_NAME.equals(name)) {
+         return WINNERS_CURSE;
+      } else {
+         return WinnersCurse.LEGACY_AUGMENTED_NAME.equals(name) ? WINNERS_CURSE1 : null;
+      }
    }
 
    private static HackMapping[] $values() {
@@ -403,8 +408,8 @@ public enum HackMapping {
          DREAM1,
          APOPHIS,
          APOPHIS1,
-         GAMBLE,
-         GAMBLE1
+         WINNERS_CURSE,
+         WINNERS_CURSE1
       };
    }
 }

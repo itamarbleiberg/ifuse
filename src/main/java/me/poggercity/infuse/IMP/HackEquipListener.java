@@ -46,6 +46,7 @@ public class HackEquipListener implements Listener, CommandExecutor {
             || stripped.contains("strength")
             || stripped.contains("frost")
             || stripped.contains("heart")
+            || stripped.contains("winner's curse")
             || stripped.contains("gamble");
       }
    }

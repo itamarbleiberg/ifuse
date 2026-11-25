@@ -91,7 +91,7 @@ public class Frost implements Listener {
       String hack2 = Infuse.getInstance().getHackManager().getHack(player.getUniqueId(), "2");
       return hack1 != null && (hack1.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack1.equals("Augmented Frost Effect"))
          || hack2 != null && (hack2.equalsIgnoreCase(ChatColor.stripColor(GEM_NAME)) || hack2.equals("Augmented Frost Effect"))
-         || Gamble.borrowsPassive(player, KEY);
+         || WinnersCurse.borrowsPassive(player, KEY);
    }
 
    @EventHandler

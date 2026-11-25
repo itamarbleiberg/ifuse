@@ -18,6 +18,7 @@ import java.util.Map.Entry;
 import java.util.logging.Logger;
 import me.poggercity.infuse.Infuses.Augmented;
 import me.poggercity.infuse.Infuses.Effects;
+import me.poggercity.infuse.Infuses.WinnersCurse;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -90,6 +91,7 @@ public class InfuseRecipeManager implements Listener {
 
       try {
          this.migrateCraftLimits();
+         this.migrateRenamedEffects();
          this.loadRecipesFromConfig();
          plugin.getServer().getPluginManager().registerEvents(this, plugin);
          this.resumeSavedRituals();
@@ -120,8 +122,31 @@ public class InfuseRecipeManager implements Listener {
       }
    }
 
+   // Keys typed or saved by an older version ("gamble" is Winner's Curse since 2.8).
    private String fixKey(String recipeKey) {
-      return recipeKey;
+      return EffectKeys.normalize(recipeKey);
+   }
+
+   // Winner's Curse was called Gamble in 2.7: its crafts made and augments used are kept under the new key.
+   private void migrateRenamedEffects() {
+      boolean changed = false;
+
+      for (Entry<String, String> rename : EffectKeys.RENAMED.entrySet()) {
+         for (String section : new String[]{"first_time", CRAFTED}) {
+            String oldPath = section + "." + rename.getKey();
+            if (this.recipeLimits.contains(oldPath)) {
+               String newPath = section + "." + rename.getValue();
+               this.recipeLimits.set(newPath, this.recipeLimits.getInt(newPath, 0) + this.recipeLimits.getInt(oldPath, 0));
+               this.recipeLimits.set(oldPath, null);
+               changed = true;
+            }
+         }
+      }
+
+      if (changed) {
+         this.saveRecipeLimits();
+         this.plugin.getLogger().info("recipe_limits.yml: Gamble's crafts were moved to its new name, Winner's Curse (winners_curse)");
+      }
    }
 
    @EventHandler
@@ -405,7 +430,8 @@ public class InfuseRecipeManager implements Listener {
       for (Map<String, Object> r : new ArrayList<>(this.waitingRituals)) {
          String worldName = String.valueOf(r.getOrDefault("world", ""));
          World world = Bukkit.getWorld(worldName);
-         String effect = String.valueOf(r.getOrDefault("effect", ""));
+         // (a ritual saved by 2.7 can have the old key "gamble")
+         String effect = EffectKeys.normalize(String.valueOf(r.getOrDefault("effect", "")));
          boolean augmented = Boolean.TRUE.equals(r.get("augmented"));
          if (world == null) {
             this.plugin.getLogger().info("Saved " + effect + " ritual is in world '" + worldName + "', which isn't loaded yet; it resumes when it loads");
@@ -536,7 +562,7 @@ public class InfuseRecipeManager implements Listener {
             return BarColor.WHITE;
          }
 
-         if (strippedName.contains("augmented gamble")) {
+         if (strippedName.contains("augmented winner's curse")) {
             return BarColor.GREEN;
          }
       }
@@ -566,7 +592,7 @@ public class InfuseRecipeManager implements Listener {
    }
 
    private static String effectLabel(String recipeKey) {
-      return recipeKey.isEmpty() ? recipeKey : Character.toUpperCase(recipeKey.charAt(0)) + recipeKey.substring(1);
+      return EffectKeys.title(recipeKey);
    }
 
    /** Removes one of every ingredient, keeping the rest of each stack (and its data) as it was. */
@@ -984,18 +1010,18 @@ public class InfuseRecipeManager implements Listener {
          case "thunder":
             this.Thunder();
             break;
-         case "gamble":
-            this.Gamble();
+         case WinnersCurse.KEY:
+            this.WinnersCurseRecipe();
       }
    }
 
-   private void Gamble() {
-      if (!this.firstTimeRewards.containsKey("gamble")) {
-         ItemStack firstTime = Augmented.createGAMBLE();
-         ItemStack standard = Effects.createGAMBLE();
-         this.firstTimeRewards.put("gamble", firstTime);
-         this.standardResults.put("gamble", standard);
-         NamespacedKey key = new NamespacedKey(this.plugin, "gamble");
+   private void WinnersCurseRecipe() {
+      if (!this.firstTimeRewards.containsKey(WinnersCurse.KEY)) {
+         ItemStack firstTime = Augmented.createCURSE();
+         ItemStack standard = Effects.createCURSE();
+         this.firstTimeRewards.put(WinnersCurse.KEY, firstTime);
+         this.standardResults.put(WinnersCurse.KEY, standard);
+         NamespacedKey key = new NamespacedKey(this.plugin, WinnersCurse.KEY);
          ShapedRecipe recipe = new ShapedRecipe(key, standard);
          recipe.shape(new String[]{"VGV", "ERE", "VGV"});
          recipe.setIngredient('V', Material.VEX_ARMOR_TRIM_SMITHING_TEMPLATE);
@@ -1007,7 +1033,7 @@ public class InfuseRecipeManager implements Listener {
             Bukkit.addRecipe(recipe);
             this.registeredRecipes.add(key);
          } catch (Exception ex) {
-            this.plugin.getLogger().warning("Failed to add Gamble recipe: " + ex.getMessage());
+            this.plugin.getLogger().warning("Failed to add Winner's Curse recipe: " + ex.getMessage());
          }
       }
    }
@@ -1066,8 +1092,8 @@ public class InfuseRecipeManager implements Listener {
             return Effects.createDRAGON();
          case "apophis":
             return Augmented.createAPOPHIS();
-         case "gamble":
-            return Augmented.createGAMBLE();
+         case WinnersCurse.KEY:
+            return Augmented.createCURSE();
          default:
             return null;
       }
@@ -1104,8 +1130,8 @@ public class InfuseRecipeManager implements Listener {
             return Effects.createDRAGON();
          case "apophis":
             return Effects.createAPOPHIS();
-         case "gamble":
-            return Effects.createGAMBLE();
+         case WinnersCurse.KEY:
+            return Effects.createCURSE();
          default:
             return null;
       }

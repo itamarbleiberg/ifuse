@@ -18,12 +18,12 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Converts config.yml from Infuse 2.4, 2.5 and 2.6 to the current layout (config_version 4), where everything about an
- * effect is in one section. The old file is kept as a backup. The new file is the commented template from the jar
- * with the server's values filled in, so the comments explaining every setting are there after the update too.
+ * Converts config.yml from Infuse 2.4 to 2.7 to the current layout (config_version 5), where everything about an effect
+ * is in one section. The old file is kept as a backup. The new file is the commented template from the jar with the
+ * server's values filled in, so the comments explaining every setting are there after the update too.
  */
 public final class ConfigMigration {
-   public static final int VERSION = 4;
+   public static final int VERSION = 5;
    public static final String[] EFFECTS = Infuse.EFFECT_KEYS;
    private static final String[] RADIUS_EFFECTS = new String[]{"fire", "invis", "ocean", "thunder", "feather", "frost", "apophis"};
    // Keys that never did anything (not read by any code); dropped without a warning. Invis never had aura particles
@@ -195,9 +195,10 @@ public final class ConfigMigration {
       }
 
       int version = old.getInt("config_version", 0);
-      String from = version == 3 ? "2.6" : old.contains("effect_settings", true) ? "2.5" : "2.4";
+      String from = version == 4 ? "2.7" : version == 3 ? "2.6" : old.contains("effect_settings", true) ? "2.5" : "2.4";
       YamlConfiguration fresh = template(plugin);
       Set<String> used = new HashSet<>();
+      List<String> renamedNotes = new ArrayList<>();
 
       // 1) Values already in the current layout (a file without config_version) are kept as they are.
       for (String path : fresh.getKeys(true)) {
@@ -259,6 +260,39 @@ public final class ConfigMigration {
          }
       }
 
+      // 4b) Renamed effects: Gamble (2.7) is Winner's Curse, so effects.gamble.* moves to effects.winners_curse.* and
+      // starting_effects.gamble to starting_effects.winners_curse. The recipe moves in step 6.
+      for (Map.Entry<String, String> rename : EffectKeys.RENAMED.entrySet()) {
+         String oldRoot = "effects." + rename.getKey() + ".";
+         String newRoot = "effects." + rename.getValue() + ".";
+         boolean any = false;
+
+         for (String path : old.getKeys(true)) {
+            if (path.startsWith(oldRoot) && !old.isConfigurationSection(path) && !path.startsWith(oldRoot + "craft.recipe.")) {
+               String newPath = newRoot + path.substring(oldRoot.length());
+               used.add(path);
+               any = true;
+               if (fresh.contains(newPath)) {
+                  fresh.set(newPath, old.get(path));
+               } else {
+                  plugin.getLogger().info("[config] '" + path + "' no longer exists and was not carried over");
+               }
+            }
+         }
+
+         String oldStart = "starting_effects." + rename.getKey();
+         if (isSet(old, oldStart)) {
+            fresh.set("starting_effects." + rename.getValue(), old.get(oldStart));
+            used.add(oldStart);
+            any = true;
+         }
+
+         if (any) {
+            renamedNotes.add(EffectKeys.title(rename.getKey()) + " is now called " + EffectKeys.title(rename.getValue()) + ": its settings moved from effects."
+               + rename.getKey() + " to effects." + rename.getValue());
+         }
+      }
+
       // 5) 2.5 passives keep their names. Ocean's water bonus was removed.
       for (String e : EFFECTS) {
          ConfigurationSection passives = old.getConfigurationSection("effect_settings." + e + ".passives");
@@ -290,6 +324,15 @@ public final class ConfigMigration {
          if (recipe == null && old.isConfigurationSection("effects." + e + ".craft.recipe")) {
             recipe = old.getConfigurationSection("effects." + e + ".craft.recipe");
             prefix = "effects." + e + ".craft.recipe";
+         }
+
+         // A renamed effect's recipe under its old key (effects.gamble.craft.recipe for Winner's Curse).
+         for (Map.Entry<String, String> rename : EffectKeys.RENAMED.entrySet()) {
+            String oldRecipe = "effects." + rename.getKey() + ".craft.recipe";
+            if (recipe == null && rename.getValue().equals(e) && old.isConfigurationSection(oldRecipe)) {
+               recipe = old.getConfigurationSection(oldRecipe);
+               prefix = oldRecipe;
+            }
          }
 
          String target = Settings.recipePath(e);
@@ -353,6 +396,10 @@ public final class ConfigMigration {
          + " in effects.<effect>). The old file was saved as " + backup.getName());
       for (String reason : reasons) {
          plugin.getLogger().info("[config] " + reason + ".");
+      }
+
+      for (String note : renamedNotes) {
+         plugin.getLogger().info("[config] " + note + ".");
       }
 
       if (!dropped.isEmpty()) {

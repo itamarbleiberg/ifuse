@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.UUID;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 /**
@@ -42,6 +43,32 @@ public class PlayerHackManager {
    private static void reload() {
       config = YamlConfiguration.loadConfiguration(file);
       lastModified = file.lastModified();
+      renameOldEffects();
+   }
+
+   // Winner's Curse was called Gamble in Infuse 2.7: players who have it keep it under its new name.
+   private static void renameOldEffects() {
+      boolean changed = false;
+
+      for (String player : config.getKeys(false)) {
+         for (String slot : new String[]{"1", "2"}) {
+            String path = player + "." + slot;
+            String hack = config.getString(path, null);
+            String stripped = hack == null ? null : ChatColor.stripColor(hack).trim();
+            if ("Gamble Effect".equalsIgnoreCase(stripped)) {
+               config.set(path, "Winner's Curse Effect");
+               changed = true;
+            } else if ("Augmented Gamble Effect".equalsIgnoreCase(stripped)) {
+               config.set(path, "Augmented Winner's Curse Effect");
+               changed = true;
+            }
+         }
+      }
+
+      if (changed) {
+         save();
+         Infuse.getInstance().getLogger().info("player_hacks.yml: Gamble is now called Winner's Curse; players who had it keep it");
+      }
    }
 
    private static void reloadIfEditedOnDisk() {
